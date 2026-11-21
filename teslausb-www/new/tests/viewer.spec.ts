@@ -169,10 +169,16 @@ test('dragging the map dot along the track seeks every camera and resumes playba
 
   await page.getByTitle('Play/pause (space)').click()
   await expect.poll(() => page.locator('video').evaluateAll(videos => videos.every(video => !video.paused))).toBe(true)
+  // The dot follows playback. Slow it right down, once the player has finished
+  // applying its own speed, so the dot is still under the pointer when the drag starts.
+  await expect.poll(() => page.locator('video').evaluateAll(async videos => {
+    videos.forEach(video => { video.playbackRate = 0.0625 })
+    await new Promise(requestAnimationFrame)
+    await new Promise(requestAnimationFrame)
+    return videos.every(video => video.playbackRate === 0.0625)
+  })).toBe(true)
 
-  const start = await dot.boundingBox()
-  if (!start) throw new Error('dot not laid out')
-  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2)
+  await dot.hover()
   await page.mouse.down()
   // Off to the side of the middle of the line: the dot snaps back onto it.
   await page.mouse.move(line.x + line.width / 2 + 40, line.y + line.height / 2, { steps: 12 })
