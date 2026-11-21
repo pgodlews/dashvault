@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Existing issues
+    url: https://github.com/pgodlews/dashvault/issues?q=is%3Aissue
+    about: "Please check whether the problem has already been reported, in open and closed issues."
+  - name: Is it a teslausb question?
+    url: https://github.com/marcone/teslausb/wiki/Troubleshooting
+    about: "Dashvault is built on teslausb. Its troubleshooting wiki covers the USB drive, Wi-Fi and archiving basics. Please do not report Dashvault problems to the teslausb project."

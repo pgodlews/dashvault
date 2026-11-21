@@ -1,0 +1,35 @@
+# External tools the runtime needs, per feature. Read by run/check-deps.sh.
+#
+# Columns (whitespace separated):
+#   feature  core | <ARCHIVE_SYSTEM> (cifs, nfs, rsync, rclone) | telegram
+#   check    command name, "py:<module>" for a Python import, or several
+#            alternatives joined with "|" (any one present is enough)
+#   package  apt package that provides it, or "-" when apt cannot install it
+#   hint     optional free text shown when the dependency is missing
+#
+# Only list tools from packages that are not Essential/Required in Debian:
+# those can be assumed present. When a script starts calling a new external
+# tool, add it here so setup, OTA and backend switches install it and
+# archiveloop reports it if it is missing.
+
+core      python3                python3
+core      curl                   curl
+core      sntp|ntpdig            ntpsec-ntpdig
+core      fsck.vfat              dosfstools
+
+cifs      mount.cifs             cifs-utils
+cifs      rsync                  rsync
+cifs      killall                psmisc
+
+nfs       mount.nfs              nfs-common
+nfs       rsync                  rsync
+nfs       killall                psmisc
+
+rsync     rsync                  rsync
+rsync     ssh                    openssh-client
+rsync     ping                   iputils-ping
+
+rclone    ping                   iputils-ping
+rclone    rclone                 -                 install it from https://rclone.org/install/
+
+# telegram: the bot and notifier need only python3 and curl (both core).

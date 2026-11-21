@@ -1,0 +1,239 @@
+#!/bin/bash -eu
+set -o pipefail
+
+title="$1"
+message="$2"
+type="${3:-}"
+
+_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=run/lib/paths.sh
+if [[ -f "$_SELF_DIR/lib/paths.sh" ]]; then
+  source "$_SELF_DIR/lib/paths.sh"
+fi
+
+if [[ -z "${LOG_FILE:-}" ]]; then
+  LOG_FILE="${ARCHIVE_LOG:-${MUTABLE_DIR:-/mutable}/archiveloop.log}"
+fi
+
+if ! declare -F log >/dev/null 2>&1; then
+  function log () {
+    echo "$(date): $*" >> "$LOG_FILE" 2>/dev/null || true
+  }
+fi
+
+function _load_telegram_env () {
+  local env_file="${TESLAUSB_TELEGRAM_ENV:-${MUTABLE_DIR:-/mutable}/teslausb_telegram.env}"
+  [[ -f "$env_file" ]] || return 0
+  local line k v
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" == *=* ]] || continue
+    k="${line%%=*}"
+    v="${line#*=}"
+    k="${k%"${k##*[![:space:]]}"}"
+    v="${v#"${v%%[![:space:]]*}"}"
+    v="${v%"${v##*[![:space:]]}"}"
+    if [[ ${#v} -ge 2 && ( ( "${v:0:1}" == "'" && "${v: -1}" == "'" ) || ( "${v:0:1}" == '"' && "${v: -1}" == '"' ) ) ]]; then
+      v="${v:1:${#v}-2}"
+    fi
+    case "$k" in
+      TELEGRAM_ENABLED)       TELEGRAM_ENABLED="$v" ;;
+      TELEGRAM_BOT_TOKEN)     TELEGRAM_BOT_TOKEN="$v" ;;
+      TELEGRAM_CHAT_ID)       TELEGRAM_CHAT_ID="$v" ;;
+      TELEGRAM_SILENT_NOTIFY) TELEGRAM_SILENT_NOTIFY="$v" ;;
+      TELEGRAM_SEND_CLIPS)    TELEGRAM_SEND_CLIPS="$v" ;;
+    esac
+  done < "$env_file"
+  if [[ -z "${TELEGRAM_ENABLED:-}" && -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]]; then
+    TELEGRAM_ENABLED="true"
+  fi
+}
+
+function _format_chat_id_json () {
+  local cid="$1"
+  if [[ "$cid" =~ ^-?[0-9]+$ ]]; then
+    printf '%s' "$cid"
+  else
+    printf '%s' "$cid" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))"
+  fi
+}
+
+# _sd_stats_line returns a one-liner summary of SD card write stats and last
+# benchmark result, or an empty string when no data is available yet.
+function _sd_stats_line () {
+  local mutable_dir="${MUTABLE_DIR:-/mutable}"
+  MUTABLE_DIR="$mutable_dir" python3 -c "
+import json
+import os
+parts = []
+try:
+    d = json.load(open(os.environ['MUTABLE_DIR'] + '/sdcard_write_stats.json'))
+    tb = d.get('total_bytes_written', 0) / 1e12
+    if tb >= 0.001:
+        parts.append('SD: %.2f TB written' % tb)
+except Exception:
+    pass
+try:
+    d = json.load(open(os.environ['MUTABLE_DIR'] + '/sdcard_benchmark.json'))
+    r = (d.get('results') or [None])[0]
+    if r:
+        m = r.get('write_mbps')
+        g = r.get('rating', '?')
+        if m is not None:
+            parts.append('%.1f MB/s (%s)' % (m, g))
+except Exception:
+    pass
+print(' | '.join(parts))
+" 2>/dev/null || true
+}
+
+# _send_tbw_warning sends a one-time Telegram alert when total bytes written
+# exceed the user-configured (or capacity-aware default) threshold.
+# A sentinel file prevents repeat notifications.
+function _send_tbw_warning () {
+  local base_url="$1" chat_ids="$2" silent="$3"
+  local mutable_dir="${MUTABLE_DIR:-/mutable}"
+  local sentinel="$mutable_dir/sdcard_tbw_warned"
+  [[ -f "$sentinel" ]] && return 0
+
+  local result
+  result=$(MUTABLE_DIR="$mutable_dir" python3 -c "
+import glob
+import json
+import os
+
+def boot_disk():
+    # Disk holding the root filesystem: mmcblk0 on a Pi, mmcblk1 on a Radxa Zero 3.
+    try:
+        majmin = ''
+        for line in open('/proc/self/mountinfo'):
+            fields = line.split()
+            if len(fields) >= 5 and fields[4] == '/':
+                majmin = fields[2]
+        dev = os.path.realpath('/sys/dev/block/' + majmin)
+        if majmin and os.path.isdir(dev):
+            if os.path.exists(os.path.join(dev, 'partition')):
+                dev = os.path.dirname(dev)
+            return os.path.basename(dev)
+    except OSError:
+        pass
+    disks = sorted(glob.glob('/sys/block/mmcblk*'))
+    return os.path.basename(disks[0]) if disks else 'mmcblk0'
+
+
+try:
+    stats = json.load(open(os.environ['MUTABLE_DIR'] + '/sdcard_write_stats.json'))
+    total_tb = stats.get('total_bytes_written', 0) / 1e12
+    if total_tb < 0.001:
+        exit(0)
+except Exception:
+    exit(0)
+
+# User-configured threshold takes priority.
+threshold_tb = None
+try:
+    threshold_tb = float(open(os.environ['MUTABLE_DIR'] + '/sdcard_tbw_threshold').read().strip())
+except Exception:
+    pass
+
+# Capacity-aware default: 500 * capacity_gb / 1000  (e.g. 64 GB -> 32 TB).
+if threshold_tb is None:
+    try:
+        sectors = int(open('/sys/block/' + boot_disk() + '/size').read().strip())
+        capacity_gb = sectors * 512 / 1e9
+        threshold_tb = max(1.0, round(500 * capacity_gb / 1000, 1))
+    except Exception:
+        threshold_tb = 32.0  # conservative fallback
+
+if total_tb >= threshold_tb:
+    print('%.2f %.2f' % (total_tb, threshold_tb))
+" 2>/dev/null || true)
+
+  [[ -z "$result" ]] && return 0
+
+  # Touch sentinel before sending so a crash doesn't cause repeat warnings.
+  touch "$sentinel" 2>/dev/null || true
+
+  local actual_tb threshold_tb warn_text
+  actual_tb=$(echo "$result" | cut -d' ' -f1)
+  threshold_tb=$(echo "$result" | cut -d' ' -f2)
+  warn_text=$(python3 -c "
+import json
+msg = u'\u26a0\ufe0f SD card write endurance warning\n%.2f TB written \u2014 threshold %.2f TB reached.\nConsider replacing your SD card soon.' % (${actual_tb}, ${threshold_tb})
+print(json.dumps(msg))
+" 2>/dev/null || true)
+
+  [[ -z "$warn_text" ]] && return 0
+
+  IFS=',' read -ra id_list <<< "$chat_ids"
+  local cid cid_json
+  for cid in "${id_list[@]}"; do
+    cid="${cid// /}"
+    [[ -z "$cid" ]] && continue
+    cid_json=$(_format_chat_id_json "$cid")
+    curl -sf -X POST "${base_url}/sendMessage" \
+      -H "Content-Type: application/json" \
+      -d "{\"chat_id\":${cid_json},\"text\":${warn_text},\"disable_notification\":${silent}}" \
+      >> "$LOG_FILE" 2>&1 || true
+  done
+}
+
+function send_telegram () {
+  log "Sending Telegram message."
+  local silent="${TELEGRAM_SILENT_NOTIFY:-false}"
+  local token="${TELEGRAM_BOT_TOKEN:-}"
+  local chat_ids="${TELEGRAM_CHAT_ID:-}"
+  [[ -n "$token" && -n "$chat_ids" ]] || return 0
+  local base_url="https://api.telegram.org/bot${token}"
+
+  # For archive-complete events append a brief SD card health line.
+  local tg_message="$message"
+  if [[ "${type:-}" = "finish" ]]; then
+    local sd_line
+    sd_line=$(_sd_stats_line)
+    [[ -n "$sd_line" ]] && tg_message="${message}"$'\n'"${sd_line}"
+  fi
+
+  local text
+  # Use printf for safe JSON string building — no injection via title/message.
+  text=$(printf '%s: %s' "$title" "$tg_message" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+
+  local chat_id chat_id_json
+  IFS=',' read -ra chat_id_list <<< "$chat_ids"
+  for chat_id in "${chat_id_list[@]}"; do
+    chat_id="${chat_id// /}"
+    [[ -z "$chat_id" ]] && continue
+    chat_id_json=$(_format_chat_id_json "$chat_id")
+    curl -sf -X POST "${base_url}/sendMessage" \
+      -H "Content-Type: application/json" \
+      -d "{\"chat_id\":${chat_id_json},\"text\":${text},\"disable_notification\":${silent}}" \
+      >> "$LOG_FILE" 2>&1 || log "Telegram sendMessage failed for chat_id ${chat_id}"
+
+    # Attach most recent Sentry clip if this is a sentry/finish event.
+    if [[ "${type:-}" = "finish" && "${TELEGRAM_SEND_CLIPS:-false}" = "true" ]]; then
+      local clip
+      clip=$(find "${TESLACAM_DIR:-/mutable/TeslaCam}/SentryClips" \
+        -name '*.mp4' -newer /proc/1 2>/dev/null | sort | tail -1)
+      if [[ -n "$clip" && $(stat -c%s "$clip") -lt 52428800 ]]; then
+        curl -sf -X POST "${base_url}/sendVideo" \
+          -F "chat_id=${chat_id}" \
+          -F "video=@${clip}" \
+          -F "caption=Latest Sentry clip" \
+          >> "$LOG_FILE" 2>&1 || log "Telegram sendVideo failed for ${clip}"
+      fi
+    fi
+  done
+
+  # Check and send one-time TBW endurance warning.
+  if [[ "${type:-}" = "finish" ]]; then
+    _send_tbw_warning "${base_url}" "${chat_ids}" "${silent}"
+  fi
+}
+
+log "$message"
+
+_load_telegram_env
+[ "${TELEGRAM_ENABLED:-false}" = "true" ] && send_telegram
+
+exit 0

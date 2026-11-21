@@ -1,0 +1,83 @@
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    root /var/www/html;
+
+    server_name _;
+
+    client_max_body_size 2g;
+
+    # Authentication: exactly one of the two blocks below is active.
+    #
+    # BEGIN auth gate
+    # The backend checks the password of every request (against the same
+    # password file) and locks an address out after repeated wrong passwords,
+    # answering 403 whatever password is sent. nginx's own auth_basic cannot do
+    # that: it keeps no count of failures, and it runs before auth_request, so
+    # with both enabled the backend would never see a wrong guess.
+    auth_request /_auth_gate;
+    # END auth gate
+    # BEGIN auth fallback
+    # Only for an nginx built without the auth_request module: setup deletes the
+    # gate blocks and enables these two lines. There is no lockout in that case.
+    #fallback# auth_basic "teslausb";
+    #fallback# auth_basic_user_file /etc/nginx/auth/.htpasswd;
+    # END auth fallback
+
+    # Root → new UI. Temporary on purpose: browsers keep a 301 forever, which
+    # would hide the install progress page after reflashing a device.
+    location = / {
+        return 302 /new/;
+    }
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # Client-side routes must reload through the redesigned UI entry point.
+    location /new/ {
+        try_files $uri $uri/ /new/index.html;
+    }
+
+    location ~* \.mjs$ {
+        default_type text/javascript;
+    }
+
+    # All locations inherit server-level authentication. CGI paths are Go routes,
+    # and the backend checks the password of proxied requests a second time.
+    location /cgi-bin/ {
+         gzip off;
+         proxy_pass http://127.0.0.1:8080;
+         proxy_set_header Host $host;
+         proxy_set_header X-Real-IP $remote_addr;
+         proxy_read_timeout 300s;
+         proxy_send_timeout 300s;
+    }
+
+    location /api/ {
+         proxy_pass http://127.0.0.1:8080;
+         proxy_set_header Host $host;
+         proxy_set_header X-Real-IP $remote_addr;
+         proxy_read_timeout 1h;
+         proxy_send_timeout 300s;
+         proxy_buffering off;
+         proxy_cache off;
+    }
+
+    location /TeslaCam/ {
+         root /var/www/html;
+    }
+
+    # BEGIN auth gate
+    location = /_auth_gate {
+         internal;
+         auth_request off;
+         proxy_pass http://127.0.0.1:8080/api/auth/check;
+         proxy_pass_request_body off;
+         proxy_set_header Content-Length "";
+         proxy_set_header Host $host;
+         proxy_set_header X-Real-IP $remote_addr;
+    }
+    # END auth gate
+}

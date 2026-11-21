@@ -1,0 +1,53 @@
+services:
+  # Fake Synology — a Samba server the fake-pi archives to.
+  samba:
+    image: dperson/samba:latest
+    container_name: teslausb-samba
+    command: >
+      -u "tesla;tesla"
+      -s "dashcam;/mount/dashcam;yes;no;no;tesla"
+      -p
+    volumes:
+      - samba-data:/mount/dashcam
+    ports:
+      - "127.0.0.1:1445:445"
+    # samba image doesn't ship smbclient; use a simple TCP probe on port 445.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 445 || exit 1"]
+      interval: 3s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
+
+  # Fake Pi — Debian bookworm with teslausb scripts mounted read-only.
+  # Scripts run in DRY_RUN mode; mounts point at the samba container.
+  fake-pi:
+    build:
+      context: ../..
+      dockerfile: tests/harness/Dockerfile.fake-pi
+    container_name: teslausb-fake-pi
+    depends_on:
+      samba:
+        condition: service_healthy
+    # Scripts are baked into the image (see Dockerfile.fake-pi) so this works
+    # under docker-in-docker CI. Rebuild with `just harness-up` after changes.
+    volumes:
+      - pi-mutable:/mutable
+      - pi-backing:/backingfiles
+    environment:
+      ARCHIVE_SYSTEM: cifs
+      ARCHIVE_SERVER: samba
+      SHARE_NAME: dashcam
+      SHARE_USER: tesla
+      SHARE_PASSWORD: tesla
+      TESLAUSB_DRY_RUN: "1"
+    cap_add:
+      - SYS_ADMIN  # for CIFS mount testing only
+    security_opt:
+      - apparmor:unconfined
+    command: ["sleep", "infinity"]
+
+volumes:
+  samba-data:
+  pi-mutable:
+  pi-backing:

@@ -1,0 +1,112 @@
+name: Release
+
+# Triggered by a semver tag push (e.g. v1.2.3).
+# Builds the Go backend for arm64, armv7, and armv6 and the React UI, and assembles
+# teslausb-update.tar.gz and teslausb-release.tar.gz with a SHA256SUMS companion
+# (see tools/build-release.sh).
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: write   # needed to create the release
+
+jobs:
+  release:
+    name: Build & publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Go backend ────────────────────────────────────────────────────────
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: teslausb-www/go-backend/go.mod
+          cache-dependency-path: teslausb-www/go-backend/go.sum
+
+      # ── React UI ─────────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10'
+
+      # ── Build and assemble ───────────────────────────────────────────────
+      # tools/build-release.sh is the single definition of what a release
+      # contains; it is also how a release is built by hand.
+      - name: Build release archives
+        run: |
+          tools/build-release.sh "${{ github.ref_name }}" "$PWD"
+          echo "--- teslausb-update.tar.gz ---"
+          tar -tzf teslausb-update.tar.gz
+          echo "--- teslausb-release.tar.gz ---"
+          tar -tzf teslausb-release.tar.gz
+          cat SHA256SUMS
+
+      # ── Publish release ───────────────────────────────────────────────────
+      # Use the release API directly for compatibility with servers that
+      # do not implement the generate_release_notes endpoint.
+      - name: Create release and upload assets
+        env:
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          API="${GITHUB_API_URL}"
+          REPO="${GITHUB_REPOSITORY}"
+          # GITHUB_REF_NAME is the short tag (v1.2.3); fall back to stripping
+          # the prefix from GITHUB_REF when the short tag is unavailable.
+          TAG="${GITHUB_REF_NAME:-${GITHUB_REF#refs/tags/}}"
+
+          # ── create or retrieve the release ──────────────────────────────
+          RELEASE_ID=$(curl -sf \
+            -H "Authorization: token $GITEA_TOKEN" \
+            "$API/repos/$REPO/releases/tags/$TAG" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])" 2>/dev/null || true)
+
+          if [ -z "$RELEASE_ID" ]; then
+            echo "Creating release $TAG..."
+            RELEASE_ID=$(curl -sf -X POST \
+              -H "Authorization: token $GITEA_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$API/repos/$REPO/releases" \
+              -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"prerelease\":false}" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+          else
+            echo "Release $TAG already exists (id=$RELEASE_ID)"
+          fi
+
+          # ── upload each asset, replacing any stale file with the same name ─
+          upload_asset() {
+            local name="$1" file="$2" ctype="$3"
+            local old_id
+            old_id=$(curl -sf \
+              -H "Authorization: token $GITEA_TOKEN" \
+              "$API/repos/$REPO/releases/$RELEASE_ID/assets" \
+              | python3 -c "
+          import json, sys
+          assets = json.load(sys.stdin)
+          print(next((str(a['id']) for a in assets if a['name'] == '$name'), ''))
+          " 2>/dev/null || true)
+            if [ -n "$old_id" ]; then
+              echo "Replacing existing asset $name (id=$old_id)..."
+              curl -sf -X DELETE \
+                -H "Authorization: token $GITEA_TOKEN" \
+                "$API/repos/$REPO/releases/$RELEASE_ID/assets/$old_id"
+            fi
+            echo "Uploading $name..."
+            curl -sf -X POST \
+              -H "Authorization: token $GITEA_TOKEN" \
+              -H "Content-Type: $ctype" \
+              "$API/repos/$REPO/releases/$RELEASE_ID/assets?name=$name" \
+              --data-binary @"$file" > /dev/null
+          }
+
+          upload_asset "teslausb-update.tar.gz" "teslausb-update.tar.gz" "application/octet-stream"
+          upload_asset "SHA256SUMS"              "SHA256SUMS"              "text/plain"
+
+          echo ""
+          echo "✓ Release $TAG published: ${GITHUB_SERVER_URL}/${REPO}/releases/tag/${TAG}"

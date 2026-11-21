@@ -1,0 +1,17 @@
+[Unit]
+Description=TeslaUSB backend (file ops + status API)
+Documentation=https://github.com/pgodlews/dashvault
+After=network.target nginx.service
+Requires=teslausb-backend.socket
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/html/go-backend
+Environment="DOCUMENT_ROOT=/var/www/html"
+ExecStart=/var/www/html/go-backend/teslausb-backend
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

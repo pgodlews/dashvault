@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Installing Dashvault</title>
+<style>
+  :root { color-scheme: dark; --bg: #0f1117; --card: #1a1d27; --line: #2d3142; --fg: #e8eaf0; --fg2: #9aa0b4; --accent: #e8263c; --ok: #22c55e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--bg); color: var(--fg); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .card { width: 100%; max-width: 440px; padding: 28px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+  h1 { margin: 0; font-size: 1.75rem; letter-spacing: -.02em; }
+  h1 span { color: var(--accent); }
+  h2 { margin: 24px 0 4px; font-size: 1.15rem; }
+  p { margin: 0; color: var(--fg2); }
+  .bar { height: 8px; margin: 18px 0 8px; overflow: hidden; background: var(--line); border-radius: 4px; }
+  .fill { width: 0; height: 100%; background: var(--accent); border-radius: 4px; transition: width .6s ease; }
+  .count { font-size: .85rem; color: var(--fg2); }
+  .note { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); font-size: .9rem; }
+  .error .fill { background: #7f1d1d; }
+  .error h2 { color: #fca5a5; }
+  a.open { display: none; margin-top: 18px; padding: 12px; text-align: center; font-weight: 600; color: #fff; background: var(--accent); border-radius: 8px; text-decoration: none; }
+  .ready a.open { display: block; }
+  .ready .fill { background: var(--ok); }
+</style>
+</head>
+<body>
+<main class="card" id="card">
+  <h1>Dash<span>vault</span></h1>
+  <h2 id="title" role="status">Starting the install</h2>
+  <div class="bar"><div class="fill" id="fill"></div></div>
+  <div class="count" id="count">&nbsp;</div>
+  <p class="note" id="note">Leave the Pi powered on. This takes several minutes, and 20 to 40 on a Pi Zero W. It restarts along the way, and this page keeps up by itself.</p>
+  <a class="open" href="/new/">Open Dashvault</a>
+</main>
+<script>
+const el = id => document.getElementById(id);
+const SLOW_MS = 30 * 60 * 1000;
+// The web app's login appears a few minutes before the last restart (about 3 on a
+// Pi Zero W), so a login prompt alone does not mean the install has finished.
+const FINAL_RESTART_WAIT_MS = 6 * 60 * 1000;
+const OFFLINE_HELP_MS = 6 * 60 * 1000;
+let lastStep = 0, total = 8, changedAt = Date.now();
+let phase = 'installing', phaseAt = 0; // installing, finishing, restarting, ready
+
+function show(title, step, note) {
+  el('title').textContent = title;
+  if (step) {
+    el('fill').style.width = Math.round(100 * step / total) + '%';
+    el('count').textContent = 'Step ' + step + ' of ' + total;
+  }
+  if (note) el('note').textContent = note;
+}
+
+function enter(next) {
+  phase = next;
+  phaseAt = Date.now();
+}
+
+function showReady() {
+  enter('ready');
+  el('card').className = 'card ready';
+  show('Dashvault is ready', total, 'Sign in with the login you created. If it does not open straight away, wait a minute and try again.');
+}
+
+function showOffline() {
+  if (phase === 'finishing') enter('restarting');
+  if (phase === 'restarting') {
+    const late = Date.now() - phaseAt > OFFLINE_HELP_MS;
+    show('Final restart', total, late
+      ? 'The Pi has not come back yet. Unplug it for a few seconds, plug it back in, and give it a few minutes.'
+      : 'The Pi is restarting one last time, so leave it powered on. This takes a minute or two, and up to about four on a Pi Zero.');
+  } else if (phase === 'installing' && lastStep) {
+    show('The Pi is restarting', lastStep);
+  }
+}
+
+function showLoginActive() {
+  if (phase === 'ready') return;
+  // No progress seen means this page was opened after the install had finished.
+  if (phase === 'restarting' || (phase === 'installing' && !lastStep)) return showReady();
+  if (phase === 'installing') enter('finishing');
+  if (Date.now() - phaseAt > FINAL_RESTART_WAIT_MS) return showReady();
+  show('Finishing the install', total, 'Almost there. The Pi will restart one last time, so leave it powered on. This page will tell you when Dashvault is ready.');
+}
+
+async function poll() {
+  let response;
+  try {
+    // "omit" stops the browser's login box appearing when the web app takes over.
+    response = await fetch('/setup-status.json', { cache: 'no-store', credentials: 'omit' });
+  } catch (e) {
+    showOffline();
+    return;
+  }
+  if (response.status === 401) {
+    showLoginActive();
+    return;
+  }
+  if (!response.ok) return;
+  let status;
+  try { status = await response.json(); } catch (e) { return; }
+  if (status.failed) {
+    el('card').className = 'card error';
+    show('Setup stopped', lastStep, 'Something went wrong. Turn the Pi off, put the card in a computer, and open teslausb-headless-setup.log on its boot partition to see why.');
+    return;
+  }
+  if (phase !== 'installing') return;
+  total = status.total || total;
+  if (status.step !== lastStep) { lastStep = status.step; changedAt = Date.now(); }
+  const slow = Date.now() - changedAt > SLOW_MS;
+  show(status.text, status.step, slow ? 'This step is taking a long time. If nothing changes soon, check teslausb-headless-setup.log on the card\'s boot partition.' : null);
+}
+poll();
+setInterval(poll, 5000);
+</script>
+</body>
+</html>

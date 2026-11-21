@@ -1,0 +1,212 @@
+#!/bin/bash -eu
+set -o pipefail
+
+# teslausb-config — backup and restore Pi configuration.
+#
+# Usage:
+#   teslausb-config backup   [--dest DIR]
+#   teslausb-config restore  <backup-file.tar.gz.enc>
+#
+# Backup collects:
+#   /root/teslausb_setup_variables.conf   — main config
+#   /etc/nginx/auth/.htpasswd             — web UI credentials
+#   /root/.ssh/authorized_keys            — SSH public keys (if present)
+#   /etc/wpa_supplicant/wpa_supplicant.conf — Wi-Fi credentials (if present)
+#   /root/teslausb_bt_key                 — BLE pairing key (if present)
+#
+# The archive is AES-256-CBC encrypted with a passphrase you supply.
+# Default destination is the archive share mountpoint (/mnt/archive) so the
+# backup survives an SD card failure.
+
+PROG="$(basename "$0")"
+TIMESTAMP="$(date -u +%Y%m%d_%H%M%S)"
+BACKUP_NAME="teslausb_config_${TIMESTAMP}.tar.gz.enc"
+
+# Config file locations (overridable via environment for testing)
+SETUP_VARS="${SETUP_VARS:-/root/teslausb_setup_variables.conf}"
+HTPASSWD="${HTPASSWD:-/etc/nginx/auth/.htpasswd}"
+SSH_KEYS="${SSH_KEYS:-/root/.ssh/authorized_keys}"
+WPA_CONF="${WPA_CONF:-/etc/wpa_supplicant/wpa_supplicant.conf}"
+BT_KEY="${BT_KEY:-/root/teslausb_bt_key}"
+TELEGRAM_ENV="${TELEGRAM_ENV:-/mutable/teslausb_telegram.env}"
+RESTORE_ROOT="${RESTORE_ROOT:-/}"
+
+DEFAULT_DEST="/mnt/archive"
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+log() { echo "$PROG: $*" >&2; }
+die() { log "ERROR: $*"; exit 1; }
+
+_CONFIG_TMPDIR=""
+cleanup_config_tmp() {
+  if [ -n "${_CONFIG_TMPDIR:-}" ]; then
+    rm -rf "$_CONFIG_TMPDIR"
+  fi
+  if declare -F ota_finish_transaction >/dev/null 2>&1; then
+    ota_finish_transaction
+  fi
+}
+trap cleanup_config_tmp EXIT
+
+require_root() {
+  [ "${TESLAUSB_SKIP_ROOT_CHECK:-0}" = "1" ] && return 0
+  [ "$(id -u)" -eq 0 ] || die "must be run as root"
+}
+
+read_passphrase() {
+  local pass1 pass2
+  read -r -s -p "Encryption passphrase: " pass1; echo >&2
+  read -r -s -p "Confirm passphrase:     " pass2; echo >&2
+  [ "$pass1" = "$pass2" ] || die "passphrases do not match"
+  [ -n "$pass1" ]         || die "passphrase must not be empty"
+  printf '%s' "$pass1"
+}
+
+read_passphrase_once() {
+  local pass
+  read -r -s -p "Decryption passphrase: " pass; echo >&2
+  printf '%s' "$pass"
+}
+
+# ── backup ────────────────────────────────────────────────────────────────────
+
+cmd_backup() {
+  local dest="$DEFAULT_DEST"
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dest) dest="$2"; shift 2 ;;
+      *) die "unknown option: $1" ;;
+    esac
+  done
+
+  require_root
+
+  [ -f "$SETUP_VARS" ] || die "$SETUP_VARS not found — nothing to back up"
+  [ -d "$dest" ]       || die "destination directory $dest does not exist"
+
+  local outfile="$dest/$BACKUP_NAME"
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  _CONFIG_TMPDIR="$tmpdir"
+
+  log "collecting config files…"
+
+  # Always include (preserving directory structure relative to RESTORE_ROOT)
+  local setup_rel="${SETUP_VARS#"$RESTORE_ROOT"}"
+  setup_rel="${setup_rel#/}"
+  mkdir -p "$tmpdir/$(dirname "$setup_rel")"
+  cp "$SETUP_VARS" "$tmpdir/$setup_rel"
+
+  # Optional — include if present
+  for optional in "$HTPASSWD" "$SSH_KEYS" "$WPA_CONF" "$BT_KEY" "$TELEGRAM_ENV"; do
+    if [ -f "$optional" ]; then
+      # Preserve directory structure inside the archive
+      local rel="${optional#"$RESTORE_ROOT"}"
+      rel="${rel#/}"
+      mkdir -p "$tmpdir/$(dirname "$rel")"
+      cp "$optional" "$tmpdir/$rel"
+      log "  + $optional"
+    fi
+  done
+
+  log "encrypting to $outfile"
+  local passphrase
+  passphrase="$(read_passphrase)"
+
+  tar -czf - -C "$tmpdir" . \
+    | openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
+        -pass "pass:$passphrase" \
+        -out "$outfile"
+
+  # Secure the backup file
+  chmod 600 "$outfile"
+
+  log "backup written: $outfile"
+  log "store the passphrase separately — there is no recovery without it."
+}
+
+# ── restore ───────────────────────────────────────────────────────────────────
+
+cmd_restore() {
+  [ $# -eq 1 ] || die "usage: $PROG restore <backup-file.tar.gz.enc>"
+  local infile="$1"
+
+  require_root
+
+  [ -f "$infile" ] || die "backup file not found: $infile"
+
+  local passphrase tmpdir
+  passphrase="$(read_passphrase_once)"
+  tmpdir="$(mktemp -d)"
+  _CONFIG_TMPDIR="$tmpdir"
+
+  log "decrypting $infile…"
+  openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 \
+    -pass "pass:$passphrase" \
+    -in "$infile" \
+    | tar -xzf - --no-same-owner --no-same-permissions -C "$tmpdir" \
+    || die "decryption failed — wrong passphrase or corrupt file"
+
+  # Reject symlinks or path traversal entries inside the extracted tree
+  if [ -n "$(find "$tmpdir" -type l -print -quit)" ]; then
+    die "archive contains symlinks — refusing to restore"
+  fi
+
+  if [ "${RESTORE_ROOT%/}" = "" ] && [ -f "${OTA_TRANSACTION_LIB:-/root/bin/ota_transaction.sh}" ]; then
+    # shellcheck disable=SC1090
+    source "${OTA_TRANSACTION_LIB:-/root/bin/ota_transaction.sh}"
+    ota_begin_transaction
+    trap cleanup_config_tmp EXIT
+  fi
+
+  # Restore each file, creating parent directories as needed
+  log "restoring files:"
+
+  local src
+  while IFS= read -r -d '' src; do
+    local rel="${src#"$tmpdir/"}"
+    case "/$rel/" in
+      */../*) die "invalid path in archive: $rel" ;;
+    esac
+    local dest
+    if [ "$rel" = "teslausb_setup_variables.conf" ]; then
+      dest="$SETUP_VARS"
+    else
+      dest="${RESTORE_ROOT%/}/$rel"
+    fi
+    mkdir -p "$(dirname "$dest")"
+    cp "$src" "$dest"
+    chmod 600 "$dest"
+    log "  → $dest"
+  done < <(find "$tmpdir" -type f -print0)
+
+  log "restore complete."
+  log "review $SETUP_VARS and reload services as needed:"
+  log "  systemctl restart teslausb-backend nginx"
+}
+
+# ── dispatch ──────────────────────────────────────────────────────────────────
+
+usage() {
+  cat >&2 <<EOF
+Usage:
+  $PROG backup  [--dest DIR]          back up Pi config (default dest: $DEFAULT_DEST)
+  $PROG restore <backup.tar.gz.enc>   restore from encrypted backup
+
+Files included in backup:
+  $SETUP_VARS       (always)
+  $HTPASSWD         (if present)
+  $SSH_KEYS         (if present)
+  $WPA_CONF         (if present)
+  $BT_KEY           (if present)
+EOF
+  exit 1
+}
+
+case "${1:-}" in
+  backup)  shift; cmd_backup  "$@" ;;
+  restore) shift; cmd_restore "$@" ;;
+  *)       usage ;;
+esac

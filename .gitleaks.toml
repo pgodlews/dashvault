@@ -1,0 +1,28 @@
+title = "teslausb gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist — example/public creds and known-safe upstream history"
+commits = [
+    # Upstream commit adding tesla_api.py with public client ID/secret constants
+    "bf10c1c9bf400fb23d20ad03340abe214d53a34a",
+]
+paths = [
+    '''doc/.*\.md''',
+    '''pi-gen-sources/00-teslausb-tweaks/files/teslausb_setup_variables\.conf''',
+    '''setup/pi/setup-teslausb''',
+]
+# Tesla's own published OAuth client secret constant — not a real secret in
+# the "don't leak" sense.
+stopwords = [
+    "TESLA_CLIENT_SECRET",
+    "TESLA_CLIENT_ID",
+]
+
+regexes = [
+    # csrf_test.go uses "0123456789abcdef" as a dummy token to test constant-time
+    # comparison — not a real secret; gitleaks generic-api-key is a false positive.
+    '''0123456789abcdef''',
+]

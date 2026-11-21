@@ -1,0 +1,53 @@
+.DS_Store
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Local secrets — never commit
+*.conf
+!examples/*.conf
+.env
+.env.local
+!.env.example
+.netrc
+*.htpasswd
+*.key
+*.pem
+*.crt
+id_rsa*
+
+# Logs — never commit captured runtime logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# uv
+.uv/
+
+# Docker harness
+tests/harness/.volumes/
+
+# Node (for future web UI tooling)
+node_modules/
+
+# Go build artifacts
+/dist/teslausb-backend
+/dist/release/
+teslausb-www/go-backend/go-backend
+teslausb-www/go-backend/teslausb-backend
+teslausb-pi-snapshot-*.tar.gz
+
+# Browser regression output
+teslausb-www/new/test-results/
+teslausb-www/new/playwright-report/

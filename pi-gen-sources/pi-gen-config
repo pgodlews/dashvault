@@ -1,0 +1,17 @@
+IMG_NAME=dashvault
+PI_GEN_RELEASE=dashvault-prebuilt
+LOCALE_DEFAULT=en_US.UTF-8
+TARGET_HOSTNAME=dashvault
+KEYBOARD_KEYMAP=us
+KEYBOARD_LAYOUT="English (US)"
+TIMEZONE_DEFAULT="America/Los_Angeles"
+FIRST_USER_NAME=pi
+FIRST_USER_PASS=raspberry
+DISABLE_FIRST_BOOT_USER_RENAME=1
+WPA_COUNTRY=US
+ENABLE_SSH=1
+STAGE_LIST="stage0 stage1 stage2 stage_teslausb"
+RELEASE=trixie
+# First boot is driven by rc.local and teslausb_setup_variables.conf on the
+# boot partition, not by cloud-init.
+ENABLE_CLOUD_INIT=0

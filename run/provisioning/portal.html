@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashvault Setup</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:    #0f1117;
+    --bg1:   #1a1d27;
+    --bg2:   #252836;
+    --bd:    #2e3148;
+    --fg0:   #f0f2ff;
+    --fg1:   #b0b5d0;
+    --fg2:   #6c7192;
+    --acc:   #e31937;
+    --ok:    #22c55e;
+    --warn:  #f59e0b;
+    --err:   #ef4444;
+    --rad:   10px;
+    --sp1:   4px; --sp2: 8px; --sp3: 12px; --sp4: 16px;
+    --sp5:   20px; --sp6: 24px;
+    --ts-sm: 0.8125rem; --ts-md: 0.9375rem; --ts-lg: 1.0625rem;
+    --ts-xl: 1.375rem;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--fg0);
+    min-height: 100svh; display: flex; flex-direction: column;
+    align-items: center; padding: var(--sp4);
+  }
+
+  .card {
+    background: var(--bg1); border: 1px solid var(--bd);
+    border-radius: var(--rad); padding: var(--sp6);
+    width: 100%; max-width: 480px; margin-top: var(--sp6);
+  }
+
+  h1 { font-size: var(--ts-xl); font-weight: 700; letter-spacing: -.02em; }
+  h1 span { color: var(--acc); }
+  h2 { font-size: var(--ts-lg); font-weight: 600; margin-bottom: var(--sp4); }
+
+  .sub { color: var(--fg1); font-size: var(--ts-sm); margin-top: var(--sp2); }
+
+  label {
+    display: block; font-size: var(--ts-sm); color: var(--fg1);
+    margin-bottom: var(--sp1);
+  }
+  input, select {
+    width: 100%; background: var(--bg2); border: 1px solid var(--bd);
+    border-radius: 6px; padding: var(--sp2) var(--sp3);
+    color: var(--fg0); font-size: var(--ts-md); outline: none;
+    transition: border-color .15s;
+  }
+  input:focus, select:focus { border-color: var(--acc); }
+  .field { margin-bottom: var(--sp4); }
+
+  .pw-wrap { position: relative; }
+  .pw-wrap input { padding-right: 44px; }
+  .pw-toggle {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; color: var(--fg2);
+    font-size: 18px; line-height: 1; padding: 4px;
+  }
+
+  button.primary {
+    width: 100%; padding: var(--sp3) var(--sp4);
+    background: var(--acc); border: none; border-radius: 6px;
+    color: #fff; font-size: var(--ts-md); font-weight: 600;
+    cursor: pointer; transition: opacity .15s;
+  }
+  button.primary:hover:not(:disabled) { opacity: .88; }
+  button.primary:disabled { opacity: .45; cursor: not-allowed; }
+
+  button.secondary {
+    background: none; border: 1px solid var(--bd); border-radius: 6px;
+    color: var(--fg1); font-size: var(--ts-sm); padding: var(--sp2) var(--sp3);
+    cursor: pointer; transition: border-color .15s;
+  }
+  button.secondary:hover { border-color: var(--fg2); }
+
+  .divider {
+    border: none; border-top: 1px solid var(--bd);
+    margin: var(--sp5) 0;
+  }
+
+  /* network list */
+  .net-list { display: flex; flex-direction: column; gap: var(--sp2); margin-bottom: var(--sp4); }
+  .net-item {
+    display: flex; align-items: center; gap: var(--sp3);
+    padding: var(--sp3); background: var(--bg2);
+    border: 2px solid transparent; border-radius: 8px; cursor: pointer;
+    transition: border-color .15s;
+  }
+  .net-item:hover { border-color: var(--bd); }
+  .net-item.selected { border-color: var(--acc); }
+  .net-bars { font-size: 18px; flex-shrink: 0; font-family: monospace; }
+  .net-name { font-size: var(--ts-md); font-weight: 500; flex: 1; word-break: break-all; }
+  .net-sec  { font-size: var(--ts-sm); color: var(--fg2); flex-shrink: 0; }
+
+  .scanning {
+    text-align: center; color: var(--fg2); font-size: var(--ts-sm);
+    padding: var(--sp5); animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.35 } }
+
+  .banner {
+    padding: var(--sp3) var(--sp4); border-radius: 6px;
+    font-size: var(--ts-sm); margin-bottom: var(--sp4);
+  }
+  .banner.warn { background: #451a03; border: 1px solid #92400e; color: #fcd34d; }
+  .banner.ok   { background: #052e16; border: 1px solid #166534; color: #86efac; }
+  .banner.err  { background: #450a0a; border: 1px solid #991b1b; color: #fca5a5; }
+
+  .step-indicator {
+    display: flex; gap: var(--sp2); margin-bottom: var(--sp5);
+  }
+  .step-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--bg2); border: 2px solid var(--bd);
+    transition: background .2s, border-color .2s;
+  }
+  .step-dot.active   { background: var(--acc); border-color: var(--acc); }
+  .step-dot.complete { background: var(--ok);  border-color: var(--ok); }
+
+  .success-icon { font-size: 56px; text-align: center; margin-bottom: var(--sp4); }
+  .link-box {
+    background: var(--bg2); border: 1px solid var(--bd); border-radius: 6px;
+    padding: var(--sp3) var(--sp4); font-size: var(--ts-lg); font-weight: 600;
+    text-align: center; color: var(--acc); text-decoration: none; display: block;
+    margin: var(--sp4) 0;
+  }
+
+  .skip-link {
+    background: none; border: none; color: var(--fg2);
+    font-size: var(--ts-sm); text-decoration: underline;
+    cursor: pointer; margin-top: var(--sp3); display: block; text-align: center;
+  }
+
+  /* hide/show */
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <!-- ── header ── -->
+  <div style="margin-bottom:var(--sp5)">
+    <h1>Dash<span>vault</span></h1>
+    <p class="sub">First-time setup wizard</p>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step-dot active"  id="dot0"></div>
+    <div class="step-dot"         id="dot1"></div>
+    <div class="step-dot"         id="dot2"></div>
+  </div>
+
+  <div id="last-error" class="banner err hidden"></div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       Bluetooth connect (only when this page is not served by the Pi)
+       ════════════════════════════════════════════════════════════ -->
+  <div id="ble-connect" class="hidden">
+    <h2>Connect over Bluetooth</h2>
+    <p class="sub" id="ble-intro">
+      Power on your Pi and wait about a minute, then connect to "Dashvault Setup".
+    </p>
+    <div id="ble-unsupported" class="banner warn hidden">
+      This browser can't use Bluetooth. Use Chrome or Edge on Android, Windows, macOS
+      or Linux, or join the Pi's "Dashvault-XXXX" Wi-Fi hotspot instead. iPhones and
+      iPads need the hotspot.
+    </div>
+    <button class="primary" id="btn-ble" onclick="connectBle()">Connect</button>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       STEP 0 — WiFi network selection
+       ════════════════════════════════════════════════════════════ -->
+  <div id="step0" class="hidden">
+    <h2>Connect to your network</h2>
+
+    <div id="net-scanning" class="scanning">Scanning for networks…</div>
+    <div id="net-list" class="net-list hidden"></div>
+    <div id="net-error" class="banner err hidden"></div>
+
+    <div style="display:flex; justify-content:flex-end; margin-bottom:var(--sp4)">
+      <button class="secondary" id="btn-rescan" onclick="doScan()" style="display:none">↺ Rescan</button>
+    </div>
+
+    <div class="field">
+      <label for="manual-ssid">Network not listed? Type its name</label>
+      <input type="text" id="manual-ssid" maxlength="32" autocomplete="off" autocapitalize="off" oninput="onManualSsid()">
+    </div>
+
+    <!-- password for selected network -->
+    <div id="wifi-pw-section" class="hidden">
+      <div class="field">
+        <label id="wifi-pw-label">Password for "<span id="selected-ssid-label"></span>"</label>
+        <div class="pw-wrap">
+          <input type="password" id="wifi-pw" placeholder="Leave blank if open" autocomplete="off">
+          <button type="button" class="pw-toggle" onclick="togglePw('wifi-pw',this)">👁</button>
+        </div>
+      </div>
+    </div>
+
+    <button class="primary" id="btn-wifi-next" onclick="goToStep1()" disabled>Next →</button>
+    <button class="skip-link" onclick="skipWifi()">Skip — this board is on Ethernet</button>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       STEP 1 — Archive settings
+       ════════════════════════════════════════════════════════════ -->
+  <div id="step1" class="hidden">
+    <h2>Where to keep clips</h2>
+
+    <div class="field">
+      <label for="archive-type">Storage</label>
+      <select id="archive-type" onchange="onArchiveTypeChange()">
+        <option value="none" selected>On this Pi for now, add backup later</option>
+        <option value="cifs">SMB / Windows share (CIFS)</option>
+        <option value="nfs">NFS share</option>
+        <option value="rclone">rclone (cloud storage)</option>
+        <option value="rsync">rsync over SSH</option>
+      </select>
+    </div>
+
+    <div id="smb-nfs-fields">
+      <div class="field">
+        <label for="archive-host" id="archive-host-label">Host (IP or hostname)</label>
+        <input type="text" id="archive-host" placeholder="192.168.1.100" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="share-name" id="share-name-label">Share name</label>
+        <input type="text" id="share-name" placeholder="TeslaCam" autocomplete="off">
+      </div>
+      <div id="cifs-creds">
+        <div class="field">
+          <label for="smb-user" id="smb-user-label">Username <span style="color:var(--fg2)">(optional)</span></label>
+          <input type="text" id="smb-user" autocomplete="off">
+        </div>
+        <div class="field" id="cifs-pass-field">
+          <label for="smb-pass">Password <span style="color:var(--fg2)">(optional)</span></label>
+          <div class="pw-wrap">
+            <input type="password" id="smb-pass" autocomplete="off">
+            <button type="button" class="pw-toggle" onclick="togglePw('smb-pass',this)">👁</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="none-note" class="banner warn hidden">
+      Clips stay on the Pi's SD card, with no backup yet. After setup, add your NAS or
+      cloud storage in the web app under Settings → Archive storage.
+    </div>
+
+    <h2>Create your login</h2>
+    <p class="sub">
+      For the Dashvault web app. The password also replaces the default password of the
+      Pi's <code>pi</code> account.
+    </p>
+    <div class="field">
+      <label for="webui-user">Username</label>
+      <input type="text" id="webui-user" value="admin" maxlength="32" autocomplete="off" autocapitalize="off">
+    </div>
+    <div class="field">
+      <label for="webui-pass">Password (at least 8 characters)</label>
+      <div class="pw-wrap">
+        <input type="password" id="webui-pass" maxlength="128" autocomplete="new-password">
+        <button type="button" class="pw-toggle" onclick="togglePw('webui-pass',this)">👁</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="webui-pass2">Repeat password</label>
+      <input type="password" id="webui-pass2" maxlength="128" autocomplete="new-password">
+    </div>
+
+    <div style="display:flex; gap:var(--sp3)">
+      <button class="secondary" onclick="goBack(0)">← Back</button>
+      <button class="primary" id="btn-apply" onclick="doApply()">Apply configuration</button>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       STEP 2 — Done
+       ════════════════════════════════════════════════════════════ -->
+  <div id="step2" class="hidden">
+    <div class="success-icon">🎉</div>
+    <h2 style="text-align:center">Settings saved</h2>
+    <p class="sub" style="text-align:center; margin-bottom:var(--sp4)">
+      Your Pi will now restart, join your Wi-Fi network and install itself.
+      Leave it powered: this takes several minutes, and longer on a Pi Zero W.
+      If it can't join your network, its setup hotspot comes back so you can try again.
+    </p>
+    <p class="sub" style="text-align:center; margin-bottom:var(--sp2)">
+      Once it's done, open your browser and go to:
+    </p>
+    <a class="link-box" href="http://dashvault.local">http://dashvault.local</a>
+    <p class="sub" style="text-align:center; font-size:.75rem">
+      If that doesn't work, check your router for the Pi's IP address.
+    </p>
+  </div>
+
+  <!-- ── applying overlay (shown during POST) ── -->
+  <div id="applying" class="hidden" style="text-align:center; padding:var(--sp5)">
+    <div class="scanning">Saving configuration…</div>
+  </div>
+
+  <!-- ── error banner (global) ── -->
+  <div id="global-err" class="banner err hidden" style="margin-top:var(--sp4)"></div>
+</div>
+
+<script>
+// ── state ──────────────────────────────────────────────────────────────────────
+let selectedSSID = null;
+let wifiSkipped  = false;
+let scanResults  = [];
+let currentStep  = 0;
+let transport    = null;
+
+// ── transports: the Pi's hotspot (HTTP) or Web Bluetooth ───────────────────────
+const httpTransport = {
+  async scan() {
+    const r = await fetch('/api/scan');
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  },
+  async apply(payload) {
+    const r = await fetch('/api/configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || r.statusText);
+  },
+};
+
+const BLE_SERVICE = '12340000-5678-1234-5678-1234567890ab';
+const BLE_SCAN    = '12340001-5678-1234-5678-1234567890ab';
+const BLE_COMMAND = '12340002-5678-1234-5678-1234567890ab';
+const BLE_STATUS  = '12340003-5678-1234-5678-1234567890ab';
+// 20 bytes always fit in one write, whatever MTU the link negotiates.
+const BLE_CHUNK   = 18;
+
+function bleTransport(scanChar, commandChar, statusChar) {
+  const text = async c => new TextDecoder().decode(await c.readValue());
+  async function send(message) {
+    const bytes = new TextEncoder().encode(JSON.stringify(message));
+    const total = Math.ceil(bytes.length / BLE_CHUNK);
+    if (total > 255) throw new Error('Settings are too long to send over Bluetooth.');
+    for (let i = 0; i < total; i++) {
+      const part = bytes.subarray(i * BLE_CHUNK, (i + 1) * BLE_CHUNK);
+      const chunk = new Uint8Array(part.length + 2);
+      chunk.set([i, total]);
+      chunk.set(part, 2);
+      await commandChar.writeValueWithResponse(chunk);
+    }
+  }
+  return {
+    async scan() {
+      if (this.scanned) {
+        await send({ type: 'rescan' });
+        await new Promise(done => setTimeout(done, 12000));
+      }
+      this.scanned = true;
+      return JSON.parse(await text(scanChar));
+    },
+    async apply(payload) {
+      await send({ type: 'configure', payload });
+      const deadline = Date.now() + 20000;
+      while (Date.now() < deadline) {
+        const status = await text(statusChar);
+        if (status === 'ok') return;
+        if (status.startsWith('error')) throw new Error(status.replace(/^error:\s*/, ''));
+        await new Promise(done => setTimeout(done, 400));
+      }
+      throw new Error('The Pi did not answer.');
+    },
+  };
+}
+
+async function connectBle() {
+  const button = document.getElementById('btn-ble');
+  button.disabled = true;
+  document.getElementById('global-err').classList.add('hidden');
+  try {
+    const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [BLE_SERVICE] }] });
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(BLE_SERVICE);
+    transport = bleTransport(
+      await service.getCharacteristic(BLE_SCAN),
+      await service.getCharacteristic(BLE_COMMAND),
+      await service.getCharacteristic(BLE_STATUS),
+    );
+    document.getElementById('ble-connect').classList.add('hidden');
+    setStep(0);
+    doScan();
+  } catch (e) {
+    if (e.name !== 'NotFoundError') showErr('Bluetooth: ' + e.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// ── init ───────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const r = await fetch('/api/status', { cache: 'no-store' });
+    const status = r.ok ? await r.json() : null;
+    if (status && status.ip) {
+      transport = httpTransport;
+      if (status.last_error) {
+        const banner = document.getElementById('last-error');
+        banner.textContent = status.last_error;
+        banner.classList.remove('hidden');
+      }
+      setStep(0);
+      doScan();
+      return;
+    }
+  } catch (e) { /* not served by the Pi: use Bluetooth */ }
+  document.getElementById('ble-connect').classList.remove('hidden');
+  if (!navigator.bluetooth) {
+    document.getElementById('ble-unsupported').classList.remove('hidden');
+    document.getElementById('ble-intro').classList.add('hidden');
+    document.getElementById('btn-ble').classList.add('hidden');
+  }
+}
+onArchiveTypeChange();
+init();
+
+// ── step navigation ────────────────────────────────────────────────────────────
+function setStep(n) {
+  [0,1,2].forEach(i => {
+    document.getElementById('step' + i).classList.toggle('hidden', i !== n);
+    const dot = document.getElementById('dot' + i);
+    dot.className = 'step-dot' +
+      (i < n ? ' complete' : i === n ? ' active' : '');
+  });
+  currentStep = n;
+  document.getElementById('global-err').classList.add('hidden');
+  // A failed Wi-Fi join is only relevant on the Wi-Fi step.
+  const lastError = document.getElementById('last-error');
+  lastError.classList.toggle('hidden', n !== 0 || !lastError.textContent);
+}
+
+function goBack(n) { setStep(n); }
+
+// ── step 0 → 1 ────────────────────────────────────────────────────────────────
+function goToStep1() { setStep(1); }
+
+function skipWifi() {
+  wifiSkipped  = true;
+  selectedSSID = null;
+  document.getElementById('btn-wifi-next').disabled = false;
+  setStep(1);
+}
+
+// ── WiFi scan ──────────────────────────────────────────────────────────────────
+function doScan() {
+  const el = document.getElementById('net-list');
+  el.classList.add('hidden');
+  el.innerHTML = '';
+  document.getElementById('net-scanning').classList.remove('hidden');
+  document.getElementById('net-error').classList.add('hidden');
+  document.getElementById('btn-rescan').style.display = 'none';
+  selectedSSID = null;
+  document.getElementById('manual-ssid').value = '';
+  updateWifiUI();
+
+  transport.scan()
+    .then(data => {
+      document.getElementById('net-scanning').classList.add('hidden');
+      document.getElementById('btn-rescan').style.display = '';
+      if (!data.length) { showNetError('No networks found nearby. You can type the name below.'); return; }
+      scanResults = data;
+      renderNetList(data);
+    })
+    .catch(e => {
+      document.getElementById('net-scanning').classList.add('hidden');
+      document.getElementById('btn-rescan').style.display = '';
+      showNetError('Scan failed: ' + e.message);
+    });
+}
+
+function showNetError(msg) {
+  const el = document.getElementById('net-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function renderNetList(nets) {
+  const el = document.getElementById('net-list');
+  el.innerHTML = '';
+  nets.forEach(net => {
+    const item = document.createElement('div');
+    item.className = 'net-item';
+    item.innerHTML =
+      `<span class="net-bars">${bars(net.signal)}</span>` +
+      `<span class="net-name">${esc(net.ssid)}</span>` +
+      `<span class="net-sec">${esc(net.security)}</span>`;
+    item.onclick = () => selectNet(net.ssid, item);
+    el.appendChild(item);
+  });
+  el.classList.remove('hidden');
+}
+
+function selectNet(ssid, item) {
+  document.querySelectorAll('.net-item').forEach(el => el.classList.remove('selected'));
+  item.classList.add('selected');
+  document.getElementById('manual-ssid').value = '';
+  selectedSSID = ssid;
+  wifiSkipped = false;
+  updateWifiUI();
+}
+
+function onManualSsid() {
+  const name = document.getElementById('manual-ssid').value.trim();
+  document.querySelectorAll('.net-item').forEach(el => el.classList.remove('selected'));
+  selectedSSID = name || null;
+  wifiSkipped = false;
+  updateWifiUI();
+}
+
+function updateWifiUI() {
+  const hasSelection = selectedSSID !== null;
+  document.getElementById('wifi-pw-section').classList.toggle('hidden', !hasSelection);
+  document.getElementById('selected-ssid-label').textContent = selectedSSID || '';
+  document.getElementById('btn-wifi-next').disabled = !hasSelection;
+}
+
+// ── step 1 — archive type toggle ───────────────────────────────────────────────
+function onArchiveTypeChange() {
+  const t = document.getElementById('archive-type').value;
+  const smbNfs = document.getElementById('smb-nfs-fields');
+  const cifsCredentials = document.getElementById('cifs-creds');
+  const cifsPassField = document.getElementById('cifs-pass-field');
+  const noneNote = document.getElementById('none-note');
+  const hostLabel = document.getElementById('archive-host-label');
+  const shareLabel = document.getElementById('share-name-label');
+  const userLabel = document.getElementById('smb-user-label');
+  const hostInput = document.querySelector('#archive-host');
+  const shareInput = document.querySelector('#share-name');
+
+  smbNfs.style.display = (t !== 'none') ? '' : 'none';
+  cifsCredentials.style.display = (t === 'cifs' || t === 'rsync') ? '' : 'none';
+  cifsPassField.style.display = (t === 'cifs') ? '' : 'none';
+  noneNote.classList.toggle('hidden', t !== 'none');
+
+  if (t === 'rclone') {
+    hostLabel.textContent = 'Remote drive name';
+    hostInput.placeholder = 'gdrive';
+    shareLabel.textContent = 'Remote path';
+    shareInput.placeholder = 'TeslaCam';
+  } else if (t === 'nfs') {
+    hostLabel.textContent = 'Host (IP or hostname)';
+    hostInput.placeholder = '192.168.1.100';
+    shareLabel.textContent = 'Export path';
+    shareInput.placeholder = '/volume1/teslacam';
+  } else if (t === 'rsync') {
+    hostLabel.textContent = 'Host (IP or hostname)';
+    hostInput.placeholder = '192.168.1.100';
+    shareLabel.textContent = 'Remote path';
+    shareInput.placeholder = '/volume1/teslacam';
+    userLabel.textContent = 'SSH Username';
+  } else {
+    hostLabel.textContent = 'Host (IP or hostname)';
+    hostInput.placeholder = '192.168.1.100';
+    shareLabel.textContent = 'Share name';
+    shareInput.placeholder = 'TeslaCam';
+    userLabel.innerHTML = 'Username <span style="color:var(--fg2)">(optional)</span>';
+  }
+}
+
+// ── apply ──────────────────────────────────────────────────────────────────────
+function doApply() {
+  const archiveType = document.getElementById('archive-type').value;
+  const archiveHost = document.getElementById('archive-host').value.trim();
+  const shareName   = document.getElementById('share-name').value.trim();
+  const username    = document.getElementById('smb-user').value;
+  const password    = document.getElementById('smb-pass').value;
+  const wifiPw      = document.getElementById('wifi-pw').value;
+  const webUser     = document.getElementById('webui-user').value.trim();
+  const webPass     = document.getElementById('webui-pass').value;
+  const webPass2    = document.getElementById('webui-pass2').value;
+
+  // Validate
+  if (!webUser) { showErr('Choose a username.'); return; }
+  if (webPass.length < 8) { showErr('The password must be at least 8 characters.'); return; }
+  if (webPass !== webPass2) { showErr('The two passwords do not match.'); return; }
+  if (archiveType !== 'none') {
+    if (!archiveHost) { showErr('Host is required.'); return; }
+    if (!shareName)   { showErr('Share name is required.'); return; }
+    if (archiveType === 'rsync' && !username.trim()) { showErr('Username is required for rsync.'); return; }
+  }
+
+  const payload = {
+    archive_type: archiveType,
+    archive_host: archiveHost,
+    share_name:   shareName,
+    username:     username,
+    password:     password,
+    webui_username: webUser,
+    webui_password: webPass,
+  };
+  if (selectedSSID && !wifiSkipped) {
+    payload.wifi_ssid     = selectedSSID;
+    payload.wifi_password = wifiPw;
+  }
+
+  // Show applying state
+  document.getElementById('step1').classList.add('hidden');
+  document.getElementById('applying').classList.remove('hidden');
+
+  transport.apply(payload)
+  .then(() => {
+    document.getElementById('applying').classList.add('hidden');
+    setStep(2);
+  })
+  .catch(e => {
+    document.getElementById('applying').classList.add('hidden');
+    document.getElementById('step1').classList.remove('hidden');
+    showErr('Could not save: ' + e.message);
+  });
+}
+
+function showErr(msg) {
+  const el = document.getElementById('global-err');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+// ── utils ──────────────────────────────────────────────────────────────────────
+function bars(sig) {
+  if (sig >= 75) return '▂▄▆█';
+  if (sig >= 50) return '▂▄▆░';
+  if (sig >= 25) return '▂▄░░';
+  return '▂░░░';
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function togglePw(id, btn) {
+  const inp = document.getElementById(id);
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  btn.textContent = show ? '🙈' : '👁';
+}
+</script>
+</body>
+</html>

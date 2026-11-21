@@ -1,0 +1,265 @@
+#!/bin/bash -eu
+set -o pipefail
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]
+then
+  echo "$0 must be sourced, not executed"
+  exit 1
+fi
+
+if [ ! -L /teslausb ]
+then
+  mount / -o remount,rw
+  rm -rf /teslausb
+  if [ -d /boot/firmware ] && findmnt --fstab /boot/firmware &> /dev/null
+  then
+    ln -s /boot/firmware /teslausb
+  else
+    ln -s /boot /teslausb
+  fi
+fi
+
+function safesource {
+  cat <<EOF > /tmp/checksetupconf
+#!/bin/bash -eu
+source '$1' &> /tmp/checksetupconf.out
+EOF
+  chmod +x /tmp/checksetupconf
+  if ! /tmp/checksetupconf
+  then
+    if declare -F setup_progress > /dev/null
+    then
+      setup_progress "Error in $1:"
+      setup_progress "$(cat /tmp/checksetupconf.out)"
+    else
+      echo "Error in $1:"
+      cat /tmp/checksetupconf.out
+    fi
+    exit 1
+  fi
+  # shellcheck disable=SC1090
+  source "$1"
+}
+
+function read_setup_variables {
+  if [ -z "${setup_file+x}" ]
+  then
+    local -r setup_file=/root/teslausb_setup_variables.conf
+  fi
+  if [ -e "$setup_file" ]
+  then
+    # "shellcheck" doesn't realize setup_file is effectively a constant
+    # shellcheck disable=SC1090
+    safesource "$setup_file"
+  else
+    echo "couldn't find $setup_file"
+    return 1
+  fi
+
+  # TODO: change this "declare" to "local" when github updates
+  # to a newer shellcheck.
+  declare -A newnamefor
+
+  newnamefor[archiveserver]=ARCHIVE_SERVER
+  newnamefor[camsize]=CAM_SIZE
+  newnamefor[musicsize]=MUSIC_SIZE
+  newnamefor[sharename]=SHARE_NAME
+  newnamefor[musicsharename]=MUSIC_SHARE_NAME
+  newnamefor[shareuser]=SHARE_USER
+  newnamefor[sharepassword]=SHARE_PASSWORD
+  newnamefor[tesla_email]=TESLA_EMAIL
+  newnamefor[tesla_password]=TESLA_PASSWORD
+  newnamefor[tesla_vin]=TESLA_VIN
+  newnamefor[timezone]=TIME_ZONE
+  newnamefor[usb_drive]=DATA_DRIVE
+  newnamefor[USB_DRIVE]=DATA_DRIVE
+  newnamefor[archivedelay]=ARCHIVE_DELAY
+  newnamefor[trigger_file_saved]=TRIGGER_FILE_SAVED
+  newnamefor[trigger_file_sentry]=TRIGGER_FILE_SENTRY
+  newnamefor[trigger_file_any]=TRIGGER_FILE_ANY
+  newnamefor[pushover_enabled]=PUSHOVER_ENABLED
+  newnamefor[pushover_user_key]=PUSHOVER_USER_KEY
+  newnamefor[pushover_app_key]=PUSHOVER_APP_KEY
+  newnamefor[gotify_enabled]=GOTIFY_ENABLED
+  newnamefor[gotify_domain]=GOTIFY_DOMAIN
+  newnamefor[gotify_app_token]=GOTIFY_APP_TOKEN
+  newnamefor[gotify_priority]=GOTIFY_PRIORITY
+  newnamefor[ifttt_enabled]=IFTTT_ENABLED
+  newnamefor[ifttt_event_name]=IFTTT_EVENT_NAME
+  newnamefor[ifttt_key]=IFTTT_KEY
+  newnamefor[sns_enabled]=SNS_ENABLED
+  newnamefor[aws_region]=AWS_REGION
+  newnamefor[aws_access_key_id]=AWS_ACCESS_KEY_ID
+  newnamefor[aws_secret_key]=AWS_SECRET_ACCESS_KEY
+  newnamefor[aws_sns_topic_arn]=AWS_SNS_TOPIC_ARN
+
+  local oldname
+  for oldname in "${!newnamefor[@]}"
+  do
+    local newname=${newnamefor[$oldname]}
+    if [[ -z ${!newname+x} ]] && [[ -n ${!oldname+x} ]]
+    then
+      local value=${!oldname}
+      export "$newname"="$value"
+      unset "$oldname"
+    fi
+  done
+
+  # set defaults for things not set in the config
+
+  # The SD image carries the release it was built from, prebuilt, in
+  # /usr/local/share/teslausb-release. Install from it instead of downloading,
+  # unless the configuration names a repository or branch, "setup-teslausb
+  # upgrade" asked for the newest code, or something newer has since replaced
+  # what the image installed (then the copy in the image is the older one).
+  if [ -z "${SOURCE_DIR:-}" ] && [ -z "${REPO:-}" ] && [ -z "${BRANCH:-}" ] \
+    && [ "${TESLAUSB_IGNORE_BUNDLED_RELEASE:-}" != 1 ] \
+    && [ -f /usr/local/share/teslausb-release/VERSION ]
+  then
+    if [ ! -f /root/teslausb_version ] \
+      || cmp -s /usr/local/share/teslausb-release/VERSION /root/teslausb_version
+    then
+      export SOURCE_DIR=/usr/local/share/teslausb-release
+    fi
+  fi
+  REPO=${REPO:-pgodlews}
+  SNAPSHOTS_ENABLED=${SNAPSHOTS_ENABLED:-true}
+  if [ "$SNAPSHOTS_ENABLED" != "true" ]
+  then
+    BRANCH="no-snapshots"
+    if declare -F setup_progress > /dev/null
+    then
+      setup_progress "WARNING: using '$BRANCH' branch because SNAPSHOTS_ENABLED is not true"
+    else
+      echo "WARNING: using '$BRANCH' branch because SNAPSHOTS_ENABLED is not true"
+    fi
+  else
+    BRANCH=${BRANCH:-main}
+  fi
+  CONFIGURE_ARCHIVING=${CONFIGURE_ARCHIVING:-true}
+  UPGRADE_PACKAGES=${UPGRADE_PACKAGES:-false}
+  export TESLAUSB_HOSTNAME=${TESLAUSB_HOSTNAME:-dashvault}
+  export NOTIFICATION_TITLE=${NOTIFICATION_TITLE:-${TESLAUSB_HOSTNAME}}
+  SAMBA_ENABLED=${SAMBA_ENABLED:-false}
+  SAMBA_GUEST=${SAMBA_GUEST:-false}
+  INCREASE_ROOT_SIZE=${INCREASE_ROOT_SIZE:-0}
+  # "max" fills all remaining space on the backingfiles partition
+  # (minus a 10 GB reserve for snapshots). Override with a fixed size
+  # like "40G" if you want to leave headroom for other purposes.
+  export CAM_SIZE=${CAM_SIZE:-max}
+  export MUSIC_SIZE=${MUSIC_SIZE:-0}
+  export BOOMBOX_SIZE=${BOOMBOX_SIZE:-0}
+  export LIGHTSHOW_SIZE=${LIGHTSHOW_SIZE:-0}
+  export DATA_DRIVE=${DATA_DRIVE:-''}
+  export USE_EXFAT=${USE_EXFAT:-false}
+  # OTA updates — disabled by default; set OTA_RELEASE_URL to your releases API.
+  export OTA_ENABLED=${OTA_ENABLED:-false}
+  export OTA_RELEASE_URL=${OTA_RELEASE_URL:-}
+  export TELEMETRY_MAP_ENABLED=${TELEMETRY_MAP_ENABLED:-false}
+  export TELEMETRY_RETENTION_DAYS=${TELEMETRY_RETENTION_DAYS:-30}
+}
+
+read_setup_variables
+
+if [ -t 0 ]
+then
+  if ! declare -F log > /dev/null 
+  then
+    function log { echo "$@"; }
+    export -f log
+  fi
+  complete -W "diagnose upgrade install" setup-teslausb
+fi
+
+function isRaspberryPi {
+  grep -q "Raspberry Pi" /sys/firmware/devicetree/base/model
+}
+
+function isPi5 {
+  grep -q "Raspberry Pi 5" /sys/firmware/devicetree/base/model
+}
+export -f isPi5
+
+function isPi4 {
+  grep -q "Raspberry Pi 4" /sys/firmware/devicetree/base/model
+}
+export -f isPi4
+
+function isPi2 {
+  grep -q "Raspberry Pi Zero 2" /sys/firmware/devicetree/base/model
+}
+export -f isPi2
+
+function isRockPi4 {
+  grep -q "ROCK Pi 4" /sys/firmware/devicetree/base/model
+}
+export -f isRockPi4
+
+function isRadxaZero {
+  grep -q "Radxa Zero" /sys/firmware/devicetree/base/model
+}
+export -f isRadxaZero
+
+STATUSLED=/tmp/fakeled
+
+while read -r led
+do
+  case "$led" in
+    *status | */led0 | */ACT | */user-led2 | */radxa-zero:green)
+      STATUSLED="$led"
+      break;
+      ;;
+    *)
+      ;;
+    esac
+done < <(find /sys/class/leds -type l)
+
+if [ ! -d "$STATUSLED" ]
+then
+  mkdir -p "$STATUSLED"
+fi
+
+if [ -f /teslausb/cmdline.txt ]
+then
+  export CMDLINE_PATH=/teslausb/cmdline.txt
+else
+  export CMDLINE_PATH=/dev/null
+fi
+
+if [ -f /teslausb/config.txt ]
+then
+  export PICONFIG_PATH=/teslausb/config.txt
+else
+  export PICONFIG_PATH=/dev/null
+fi
+
+# losetup sometimes fails because of a mismatch between kernel and user land
+# (https://lore.kernel.org/lkml/8bed44f2-273c-856e-0018-69f127ea4258@linux.ibm.com/)
+# but even when it fails like that, testing shows the loop device gets created anyway
+function losetup_find_show {
+  local lastarg="${*:$#}"
+  local loop
+  loop=$(losetup -n -O NAME -j "$lastarg")
+  if losetup -f --show "$@"
+  then
+    return
+  fi
+  if [ -n "$loop" ]
+  then
+    # losetup failed, and there was already a previous loop device for the
+    # given file.
+    # Rather than trying to determine if a new loop device was created, just return
+    # an error.
+    return 1
+  fi
+  local newloop
+  newloop=$(losetup -n -O NAME -j "$lastarg")
+  if [ -z "$newloop" ]
+  then
+    # losetup truly failed and didn't even create a loop device
+    return 1
+  fi
+  echo "$newloop"
+}
+
+export -f losetup_find_show

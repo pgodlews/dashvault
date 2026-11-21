@@ -1,0 +1,39 @@
+# Simulated Raspberry Pi environment for testing teslausb scripts.
+# Intentionally mirrors Raspbian bookworm package set.
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TESLAUSB_DRY_RUN=1 \
+    PATH="/opt/teslausb/run:${PATH}"
+
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        bash \
+        bats \
+        ca-certificates \
+        cifs-utils \
+        curl \
+        jq \
+        python3 \
+        python3-pip \
+        python3-venv \
+        rsync \
+        shellcheck \
+        smbclient \
+        tini \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /mutable /backingfiles /opt/teslausb
+
+WORKDIR /opt/teslausb
+
+# Bake the scripts into the image so the harness works under docker-in-docker
+# setups (CI with a mounted docker.sock), where compose bind mounts
+# don't resolve from inside the runner's job container. For fast local
+# iteration, use `just harness-up` which rebuilds the image on each invocation.
+COPY run /opt/teslausb/run
+COPY setup /opt/teslausb/setup
+COPY tests/harness/fixtures /opt/teslausb/fixtures
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["sleep", "infinity"]

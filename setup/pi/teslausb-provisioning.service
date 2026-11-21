@@ -1,0 +1,26 @@
+[Unit]
+Description=Dashvault first-run provisioning (BLE + WiFi AP)
+After=network.target NetworkManager.service bluetooth.target avahi-daemon.service
+Wants=network.target bluetooth.target
+
+# Only run if the provisioning_done sentinel does NOT exist yet.
+ConditionPathExists=!/boot/firmware/provisioning_done
+
+[Service]
+Type=simple
+ExecStart=/root/provisioning/start.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=teslausb-provisioning
+
+# Give the service enough time to run through BLE + AP timeouts.
+TimeoutStartSec=900
+TimeoutStopSec=30
+
+# Run as root (required for nmcli, BlueZ D-Bus, writing /root/).
+User=root
+
+[Install]
+WantedBy=multi-user.target
