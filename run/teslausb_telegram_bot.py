@@ -52,8 +52,6 @@ log = logging.getLogger("teslausb-bot")
 
 def _load_conf_defaults(conf_path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
-    if not conf_path.is_file():
-        return values
     try:
         for raw_line in conf_path.read_text(encoding="utf-8", errors="replace").splitlines():
             line = raw_line.strip()
