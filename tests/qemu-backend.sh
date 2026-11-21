@@ -22,7 +22,7 @@ qemu_for() {
       return 0
     fi
   done
-  echo "QEMU user emulator for ${arch} is not installed (qemu-user-static)" >&2
+  echo "QEMU user emulator for ${arch} is not installed (qemu-user)" >&2
   return 1
 }
 
