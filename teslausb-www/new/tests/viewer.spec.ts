@@ -173,8 +173,7 @@ test('dragging the map dot along the track seeks every camera and resumes playba
   // applying its own speed, so the dot is still under the pointer when the drag starts.
   await expect.poll(() => page.locator('video').evaluateAll(async videos => {
     videos.forEach(video => { video.playbackRate = 0.0625 })
-    await new Promise(requestAnimationFrame)
-    await new Promise(requestAnimationFrame)
+    await new Promise(done => setTimeout(done, 50))
     return videos.every(video => video.playbackRate === 0.0625)
   })).toBe(true)
 
