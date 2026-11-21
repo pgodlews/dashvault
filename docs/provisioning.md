@@ -6,7 +6,7 @@ Dashvault includes a provisioning system designed for a headless Pi installed wi
 - A **temporary open Wi-Fi access point and captive portal** for browser setup.
 - The authenticated **web setup wizard**, which applies configuration and streams setup progress.
 
-The captive portal is the self-contained path. The same page, `run/provisioning/portal.html`, also works as a Web Bluetooth client when it is opened from a secure origin (HTTPS or `localhost`) in Chrome or Edge. It needs hosting for that, which is not set up yet. Safari and iOS have no Web Bluetooth, so iPhones use the hotspot.
+The captive portal is the self-contained path. The same page, `run/provisioning/portal.html`, also works as a Web Bluetooth client when it is opened from a secure origin (HTTPS or `localhost`) in Chrome or Edge. The hosted copy is at <https://pgodlews.github.io/dashvault/setup/>. Its security policy blocks all network requests, so details typed into it can only reach the Pi over Bluetooth. Safari and iOS have no Web Bluetooth, so iPhones use the hotspot.
 
 All paths only produce `/root/teslausb_setup_variables.conf`. The Pi then reboots and runs the same setup as a configuration file placed on the card by hand.
 
