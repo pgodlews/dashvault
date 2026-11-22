@@ -1,6 +1,6 @@
 # Telegram notifications and bot
 
-Dashvault can send you a [Telegram](https://telegram.org) message when archiving starts and finishes, and it runs a bot you can send commands to. Both are optional.
+Dashvault can send you a [Telegram](https://telegram.org) message when archiving starts and finishes, and it runs a bot you can send commands to. Both are optional. Prefer to watch? See the [Telegram setup video](https://youtu.be/B9HcaLyg4uk).
 
 Telegram is the only notification channel. teslausb's Pushover, Gotify, IFTTT, Discord, Slack, Matrix, Signal, ntfy, AWS SNS, webhook and shell-command notifications were removed. If your configuration file still has their settings, they are ignored and can be deleted.
 

@@ -269,7 +269,12 @@ The image's `pi` user starts with the well-known password `raspberry`. Setup ove
 
 ## Notifications
 
-Telegram is the only built-in notification channel. The Pushover, Gotify, IFTTT, Discord, Slack, Matrix, Signal, ntfy, AWS SNS and webhook options of teslausb were removed, and their settings no longer send anything. To [set it up](doc/ConfigureNotificationsForArchive.md), create a bot in Telegram, then enter its token and your chat ID in Settings.
+Telegram is the only built-in notification channel. The Pushover, Gotify, IFTTT, Discord, Slack, Matrix, Signal, ntfy, AWS SNS and webhook options of teslausb were removed, and their settings no longer send anything. To [set it up](doc/ConfigureNotificationsForArchive.md), create a bot in Telegram, enter its token in Settings, send the bot a message, and press **Find my chat ID**.
+
+<p align="center">
+  <a href="https://youtu.be/B9HcaLyg4uk"><img alt="Watch the Dashvault Telegram setup video on YouTube." src="docs/images/readme/telegram-setup-video.webp" width="640"></a><br>
+  <sub><a href="https://youtu.be/B9HcaLyg4uk">Watch the Telegram setup video on YouTube</a>, from creating the bot to archive alerts and commands.</sub>
+</p>
 
 ## Updates
 
