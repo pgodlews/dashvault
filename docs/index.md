@@ -9,6 +9,13 @@ AI agent and developer reference for the `pgodlews/dashvault` fork.
 | [`architecture.md`](architecture.md) | Understand the system as a whole — components, Mermaid data flows, key concepts |
 | [`../AGENTS.md`](../AGENTS.md) | Repository rules, verification commands, Git remotes, and live-hardware safety |
 
+## Setting Up a Pi
+
+| Guide | Use it when... |
+|-------|----------------|
+| [`setup-wifi-hotspot.md`](setup-wifi-hotspot.md) | You want the illustrated setup over the Pi's `Dashvault-XXXX` hotspot, from any phone or laptop |
+| [`setup-bluetooth.md`](setup-bluetooth.md) | You want the illustrated setup over Bluetooth, from Chrome or Edge |
+
 ## Deep Dives
 
 | Doc | Read when you're working on... |
