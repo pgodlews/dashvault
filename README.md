@@ -195,6 +195,11 @@ You also need:
 
 Write the image to a microSD card, power on the Pi, and set it up from your phone or computer. The image carries the Dashvault release it was built from. First boot still needs internet access for package setup.
 
+<p align="center">
+  <a href="https://youtu.be/4u9QSr7XqnM"><img alt="Watch the Dashvault setup walkthrough on YouTube." src="docs/images/readme/setup-video.webp" width="640"></a><br>
+  <sub><a href="https://youtu.be/4u9QSr7XqnM">Watch the 2-minute setup walkthrough on YouTube</a>, covering both the hotspot and Bluetooth routes.</sub>
+</p>
+
 | Set up over | Works from | Guide |
 |---|---|---|
 | **Wi-Fi hotspot** | Any phone or laptop, including iPhone | [Illustrated hotspot guide](docs/setup-wifi-hotspot.md) |
