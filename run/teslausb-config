@@ -142,7 +142,7 @@ cmd_restore() {
   tmpdir="$(mktemp -d)"
   _CONFIG_TMPDIR="$tmpdir"
 
-  log "decrypting $infile…"
+  log "decrypting ${infile}…"
   openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 \
     -pass "pass:$passphrase" \
     -in "$infile" \
