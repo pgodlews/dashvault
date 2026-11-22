@@ -7,21 +7,52 @@ set -o pipefail
 # filesystem, which leaves it writable after any update or settings change.
 # Keep logs in RAM, and put a board that was left writable back to read-only.
 SYSLOG_DEFAULTS="${OTA_SYSLOG_DEFAULTS:-/etc/default/busybox-syslogd}"
-SYSLOG_SETTING='SYSLOG_OPTS="-C128 -f /dev/null"'
-if [ -f "$SYSLOG_DEFAULTS" ] && ! grep -qxF "$SYSLOG_SETTING" "$SYSLOG_DEFAULTS"; then
+if [ -f "$SYSLOG_DEFAULTS" ]; then
+  # Newer BusyBox builds follow /etc/syslog.conf, so give them an empty config.
+  # Older builds have no -f option and already log only to RAM with -C.
+  SYSLOG_HELP="$(busybox syslogd --help 2>&1 || true)"
+  case "$SYSLOG_HELP" in
+    *"-f FILE"*) SYSLOG_SETTING='SYSLOG_OPTS="-C128 -f /dev/null"' ;;
+    *) SYSLOG_SETTING='SYSLOG_OPTS="-C128"' ;;
+  esac
+  if ! grep -qxF "$SYSLOG_SETTING" "$SYSLOG_DEFAULTS"; then
+    (
+      # shellcheck disable=SC1090
+      source "${OTA_TRANSACTION_LIB:-/root/bin/ota_transaction.sh}"
+      ota_begin_transaction
+      if findmnt --fstab -no OPTIONS "$OTA_ROOT_MOUNT" | tr ',' '\n' | grep -qx ro; then
+        # shellcheck disable=SC2034  # read by ota_end_transaction
+        OTA_ROOT_WAS_RO=true
+      fi
+      { grep -v '^SYSLOG_OPTS=' "$SYSLOG_DEFAULTS" || true; echo "$SYSLOG_SETTING"; } \
+        > "$SYSLOG_DEFAULTS.new"
+      chmod 644 "$SYSLOG_DEFAULTS.new"
+      mv "$SYSLOG_DEFAULTS.new" "$SYSLOG_DEFAULTS"
+      systemctl try-restart busybox-syslogd.service \
+        || echo "WARNING: could not restart busybox-syslogd" >&2
+    )
+  fi
+fi
+
+# Older installers replace their own running script, which blocks their final
+# remount. Once per installed version, put a read-only system back to read-only.
+VERSION_FILE="${OTA_VERSION_FILE:-/root/teslausb_version}"
+FINALIZED_VERSION="${OTA_FINALIZED_VERSION:-/mutable/teslausb_finalized_version}"
+if [ -f "$VERSION_FILE" ] && [ -e "${OTA_SETUP_FINISHED:-/teslausb/TESLAUSB_SETUP_FINISHED}" ] \
+  && ! cmp -s "$VERSION_FILE" "$FINALIZED_VERSION"; then
   (
-    # shellcheck disable=SC1090
-    source "${OTA_TRANSACTION_LIB:-/root/bin/ota_transaction.sh}"
-    ota_begin_transaction
-    if findmnt --fstab -no OPTIONS "$OTA_ROOT_MOUNT" | tr ',' '\n' | grep -qx ro; then
-      # shellcheck disable=SC2034  # read by ota_end_transaction
-      OTA_ROOT_WAS_RO=true
+    ROOT_LOCK="${OTA_LOCK_FILE:-/run/teslausb/rootfs.lock}"
+    ROOT_MOUNT="${OTA_ROOT_MOUNT:-/}"
+    mkdir -p "$(dirname "$ROOT_LOCK")"
+    exec 8> "$ROOT_LOCK"
+    flock -x 8
+    if findmnt --fstab -no OPTIONS "$ROOT_MOUNT" | tr ',' '\n' | grep -qx ro \
+      && findmnt -no OPTIONS "$ROOT_MOUNT" | tr ',' '\n' | grep -qx rw \
+      && ! mount -o remount,ro "$ROOT_MOUNT"; then
+      echo "WARNING: could not return $ROOT_MOUNT to read-only" >&2
+      exit 0
     fi
-    { grep -v '^SYSLOG_OPTS=' "$SYSLOG_DEFAULTS" || true; echo "$SYSLOG_SETTING"; } \
-      > "$SYSLOG_DEFAULTS.new"
-    chmod 644 "$SYSLOG_DEFAULTS.new"
-    mv "$SYSLOG_DEFAULTS.new" "$SYSLOG_DEFAULTS"
-    systemctl try-restart busybox-syslogd.service
+    cp "$VERSION_FILE" "$FINALIZED_VERSION"
   )
 fi
 

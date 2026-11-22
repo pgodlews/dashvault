@@ -174,46 +174,109 @@ def test_ota_upgrades_and_restores_telegram_unit(
         log.write_text("")
 
 
-def test_finalize_keeps_logs_in_ram_and_restores_read_only(tmp_path: Path) -> None:
+def _finalize_env(tmp_path: Path, busybox_has_f: bool) -> dict[str, str]:
     commands = tmp_path / "commands"
     commands.mkdir()
+    help_text = "-C[size_kb] Log to shared mem"
+    if busybox_has_f:
+        help_text += "\n-f FILE Use FILE as config"
     for name, body in {
         "systemctl": 'echo "$*" >> "$SERVICE_LOG"',
         "mount": 'echo "$*" >> "$MOUNT_LOG"',
         "findmnt": 'if [ "$1" = --fstab ]; then echo defaults,noatime,ro; else echo rw,noatime; fi',
         "flock": "exit 0",
+        "busybox": f"echo '{help_text}'; exit 1",
     }.items():
         path = commands / name
         path.write_text(f"#!/bin/bash\n{body}\n")
         path.chmod(0o755)
-    defaults = tmp_path / "busybox-syslogd"
-    defaults.write_text('# comment\nSYSLOG_OPTS="-C128"\nKLOG_OPTS=""\n')
-    services = tmp_path / "services.log"
-    mounts = tmp_path / "mount.log"
-    env = {
+    return {
         **os.environ,
         "PATH": f"{commands}:{os.environ['PATH']}",
         "OTA_TRANSACTION_LIB": str(TRANSACTION),
         "OTA_LOCK_FILE": str(tmp_path / "root.lock"),
-        "OTA_SYSLOG_DEFAULTS": str(defaults),
+        "OTA_SYSLOG_DEFAULTS": str(tmp_path / "busybox-syslogd"),
         "OTA_PACKAGED_TELEGRAM_UNIT": str(tmp_path / "no-unit"),
-        "SERVICE_LOG": str(services),
-        "MOUNT_LOG": str(mounts),
+        "OTA_VERSION_FILE": str(tmp_path / "version"),
+        "OTA_FINALIZED_VERSION": str(tmp_path / "finalized-version"),
+        "OTA_SETUP_FINISHED": str(tmp_path / "setup-finished"),
+        "SERVICE_LOG": str(tmp_path / "services.log"),
+        "MOUNT_LOG": str(tmp_path / "mount.log"),
     }
-    for _ in range(2):  # the second startup must change nothing
-        result = subprocess.run(  # noqa: S603 — repository script only
-            [BASH, "-eu", str(ROOT / "run/ota_finalize.sh")],
-            env=env,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, result.stdout + result.stderr
 
-    setting = 'SYSLOG_OPTS="-C128 -f /dev/null"'
-    assert defaults.read_text().splitlines() == ["# comment", 'KLOG_OPTS=""', setting]
-    assert services.read_text().splitlines() == ["try-restart busybox-syslogd.service"]
-    assert mounts.read_text().splitlines() == ["-o remount,rw /", "-o remount,ro /"]
-    assert setting in (ROOT / "setup/pi/make-root-fs-readonly.sh").read_text()
+
+def _run_finalize(env: dict[str, str]) -> None:
+    result = subprocess.run(  # noqa: S603 — repository script only
+        [BASH, "-eu", str(ROOT / "run/ota_finalize.sh")],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def _lines(path: Path) -> list[str]:
+    return path.read_text().splitlines() if path.exists() else []
+
+
+@pytest.mark.parametrize(
+    ("busybox_has_f", "before", "after", "changes"),
+    [
+        (True, '-C128', '-C128 -f /dev/null', True),
+        (False, '-C128 -f /dev/null', '-C128', True),
+        (False, '-C128', '-C128', False),
+        (True, '-C128 -f /dev/null', '-C128 -f /dev/null', False),
+    ],
+)
+def test_finalize_keeps_logs_in_ram_for_each_busybox(
+    tmp_path: Path, busybox_has_f: bool, before: str, after: str, changes: bool
+) -> None:
+    env = _finalize_env(tmp_path, busybox_has_f)
+    defaults = tmp_path / "busybox-syslogd"
+    defaults.write_text(f'# comment\nSYSLOG_OPTS="{before}"\nKLOG_OPTS=""\n')
+
+    for _ in range(2):  # the second startup must change nothing
+        _run_finalize(env)
+
+    assert f'SYSLOG_OPTS="{after}"' in defaults.read_text().splitlines()
+    assert defaults.read_text().count("SYSLOG_OPTS=") == 1
+    assert "# comment" in defaults.read_text() and 'KLOG_OPTS=""' in defaults.read_text()
+    restarts = ["try-restart busybox-syslogd.service"] if changes else []
+    assert _lines(tmp_path / "services.log") == restarts
+    mounts = ["-o remount,rw /", "-o remount,ro /"] if changes else []
+    assert _lines(tmp_path / "mount.log") == mounts
+
+
+def test_setup_only_uses_the_syslog_config_option_when_supported() -> None:
+    source = (ROOT / "setup/pi/make-root-fs-readonly.sh").read_text()
+    assert 'busybox syslogd --help' in source
+    assert """*"-f FILE"*) syslog_setting='SYSLOG_OPTS="-C128 -f /dev/null"'""" in source
+    assert """*) syslog_setting='SYSLOG_OPTS="-C128"'""" in source
+
+
+def test_finalize_returns_root_to_read_only_once_per_version(tmp_path: Path) -> None:
+    env = _finalize_env(tmp_path, False)
+    (tmp_path / "version").write_text("v2\n")
+    (tmp_path / "setup-finished").touch()
+    mounts = tmp_path / "mount.log"
+
+    _run_finalize(env)
+    _run_finalize(env)
+    assert _lines(mounts) == ["-o remount,ro /"]
+    assert (tmp_path / "finalized-version").read_text() == "v2\n"
+
+    (tmp_path / "version").write_text("v3\n")
+    _run_finalize(env)
+    assert _lines(mounts) == ["-o remount,ro /", "-o remount,ro /"]
+
+
+def test_finalize_leaves_root_writable_during_setup(tmp_path: Path) -> None:
+    env = _finalize_env(tmp_path, False)
+    (tmp_path / "version").write_text("v2\n")
+
+    _run_finalize(env)
+    assert _lines(tmp_path / "mount.log") == []
+    assert not (tmp_path / "finalized-version").exists()
 
 
 def _ota_commands(tmp_path: Path) -> Path:

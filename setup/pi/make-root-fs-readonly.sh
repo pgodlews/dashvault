@@ -58,8 +58,13 @@ log_progress "Installing busybox-syslogd..."
 apt-get -y --force-yes install busybox-syslogd; dpkg --purge rsyslog
 # Debian's /etc/syslog.conf sends logs to files. While the root filesystem is
 # briefly writable, syslogd would open them and keep them open, and the root
-# filesystem could then not return to read-only. Keep logs in RAM only.
-syslog_setting='SYSLOG_OPTS="-C128 -f /dev/null"'
+# filesystem could then not return to read-only. Keep logs in RAM only. Older
+# BusyBox builds have no -f option and already log only to RAM with -C.
+syslog_help="$(busybox syslogd --help 2>&1 || true)"
+case "$syslog_help" in
+  *"-f FILE"*) syslog_setting='SYSLOG_OPTS="-C128 -f /dev/null"' ;;
+  *) syslog_setting='SYSLOG_OPTS="-C128"' ;;
+esac
 { grep -v '^SYSLOG_OPTS=' /etc/default/busybox-syslogd || true; echo "$syslog_setting"; } \
   > /etc/default/busybox-syslogd.new
 chmod 644 /etc/default/busybox-syslogd.new
