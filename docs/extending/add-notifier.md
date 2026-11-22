@@ -1,6 +1,6 @@
 # Adding a New Notification Channel
 
-`run/send-push-message` is the notification dispatcher. It is called by `archiveloop` at the start and end of every archive cycle, and by other runtime scripts for low-space and temperature alerts.
+`run/send-push-message` is the notification dispatcher. It is called by `archiveloop` at the start and end of every archive cycle, and by other runtime scripts for temperature alerts and music copy results.
 
 This guide shows you how to add a new channel. No other file in the runtime needs to change.
 
@@ -139,7 +139,7 @@ export type=finish   # send-push-message sets this from $3; set it manually for 
 |-------|-----------|-------------|
 | `start` | Archive cycle begins | "Archiving X clips starting at HH:MM" |
 | `finish` | Archive cycle ends | "Archived X clips in 3m12s" |
-| *(empty)* | Low-space, temperature, WiFi alerts | Short status message |
+| *(empty)* | Temperature alerts and music copy results | Short status message |
 
 Only act on `$type` if your channel needs to behave differently (e.g. attaching a video only on finish). Most simple notifiers can ignore it.
 

@@ -85,12 +85,12 @@ forever:
 - Sleep interval: `ARCHIVE_DELAY` env var (default 20s)
 
 **`freespacemanager()`**  
-- Monitors free space on `cam_disk.bin`
-- Sends low-space notification via `send-push-message` when < threshold
+- Monitors free space on the filesystem holding `cam_disk.bin`
+- Runs `manage_free_space.sh` when free space falls below the reserve. It sends no notification
 
 **`wifichecker()`**  
-- Monitors Wi-Fi connectivity
-- Sends notification on connect/disconnect via `send-push-message`
+- Watches kernel messages for Wi-Fi firmware failures
+- Reloads the Wi-Fi driver after repeated failures. It sends no notification
 
 ### Sync Trigger Mechanism
 Touching `/tmp/archive_is_unreachable` signals archiveloop to skip waiting and run a fresh archive cycle immediately. Used by:

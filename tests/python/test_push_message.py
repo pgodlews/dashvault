@@ -70,3 +70,34 @@ def test_push_message_loads_telegram_env_and_sends_standalone(tmp_path: Path) ->
     assert '"chat_id":-100999' in calls
     assert '"chat_id":"@mychannel"' in calls
     assert '"disable_notification":true' in calls
+
+
+def test_push_message_title_has_one_colon(tmp_path: Path) -> None:
+    script = Path(__file__).resolve().parents[2] / "run/send-push-message"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    curl_log = tmp_path / "curl.log"
+    fake_curl = bin_dir / "curl"
+    fake_curl.write_text('#!/bin/bash\nprintf "%s\\n" "$*" >> "$CURL_LOG"\n')
+    fake_curl.chmod(0o755)
+    env_file = tmp_path / "teslausb_telegram.env"
+    env_file.write_text("TELEGRAM_BOT_TOKEN=123456:token\nTELEGRAM_CHAT_ID=123456\n")
+
+    for title in ("dashvault:", "dashvault"):
+        curl_log.unlink(missing_ok=True)
+        result = subprocess.run(  # noqa: S603
+            ["bash", str(script), title, "Archived 2 files in 5 seconds", "start"],  # noqa: S607
+            text=True,
+            capture_output=True,
+            env={
+                **os.environ,
+                "PATH": f"{bin_dir}:{os.environ['PATH']}",
+                "CURL_LOG": str(curl_log),
+                "MUTABLE_DIR": str(tmp_path),
+                "TESLAUSB_TELEGRAM_ENV": str(env_file),
+                "ARCHIVE_LOG": str(tmp_path / "archiveloop.log"),
+            },
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert '"text":"dashvault: Archived 2 files in 5 seconds' in curl_log.read_text()

@@ -197,7 +197,8 @@ function send_telegram () {
 
   local text
   # Use printf for safe JSON string building — no injection via title/message.
-  text=$(printf '%s: %s' "$title" "$tg_message" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+  # Callers may pass the title with its colon, so never print a second one.
+  text=$(printf '%s: %s' "${title%:}" "$tg_message" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
 
   local chat_id chat_id_json
   IFS=',' read -ra chat_id_list <<< "$chat_ids"

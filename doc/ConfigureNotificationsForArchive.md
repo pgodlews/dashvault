@@ -4,7 +4,7 @@ Dashvault can send you a [Telegram](https://telegram.org) message when archiving
 
 Telegram is the only notification channel. teslausb's Pushover, Gotify, IFTTT, Discord, Slack, Matrix, Signal, ntfy, AWS SNS, webhook and shell-command notifications were removed. If your configuration file still has their settings, they are ignored and can be deleted.
 
-Notifications need the Pi to have internet access while it is on your Wi-Fi. A message is sent only when there are clips to archive. The finish message also carries a line on microSD health, and a one-time warning when the card reaches its wear threshold.
+Notifications need the Pi to have internet access while it is on your Wi-Fi. A message is sent only when there are clips to archive. The finish message also carries a line on microSD health, and a one-time warning when the card reaches its wear threshold. If you configure temperature thresholds, Dashvault also sends temperature alerts. It does not send live Sentry, archive failure or low-space alerts.
 
 ## 1. Create a bot
 
@@ -21,7 +21,7 @@ The bot only answers the chat IDs you list. To allow more than one person, separ
 
 ## 3. Enter them
 
-**In the web app:** open Settings, go to **Notifications — Telegram**, enter the token and chat ID, save, and press the test button. A test message should arrive within a few seconds.
+**In the web app:** open Settings, go to **Notifications — Telegram**, enter the token and chat ID, turn on **Enable bot service**, save, and press **Send test message**. A test message should arrive within a few seconds. The test can reach Telegram while the bot is off, so notifications and commands only work once that switch is on and saved.
 
 **Or in the configuration file** (`teslausb_setup_variables.conf`), before setup:
 

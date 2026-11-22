@@ -1238,6 +1238,7 @@ function TelegramSection() {
       setSilent(saved.silent_notify)
       setEnabled(saved.service_enabled)
       setBotToken('')
+      setTestStatus('idle'); setTestMsg('')
       setSaveStatus('done'); setSaveMsg('Saved.')
     } catch (e: unknown) {
       setSaveStatus('error'); setSaveMsg(e instanceof Error ? e.message : 'Save failed.')
@@ -1249,7 +1250,10 @@ function TelegramSection() {
     try {
       const res = await apiFetch('/api/config/telegram/test', { method: 'POST' })
       if (!res.ok) { const t = await res.json().catch(() => ({})); throw new Error((t as {error?:string}).error ?? 'Test failed.') }
-      setTestStatus('done'); setTestMsg('Test message sent — check your Telegram.')
+      setTestStatus('done')
+      setTestMsg(cfg?.service_enabled
+        ? 'Test message sent — check your Telegram.'
+        : 'Test sent, but the bot is off. Turn on Enable bot service and save to get notifications and commands.')
     } catch (e: unknown) {
       setTestStatus('error'); setTestMsg(e instanceof Error ? e.message : 'Could not reach Telegram API — check Pi internet access.')
     }
@@ -1271,7 +1275,7 @@ function TelegramSection() {
       id="notifications"
       icon={<Icon name="send" size={16} />}
       title="Notifications — Telegram"
-      sub="Bot pings this chat when Sentry events, archive failures, or low-space alerts fire."
+      sub="Messages this chat when archiving starts and finishes, with SD card wear and configured temperature alerts. You can also send it commands."
       status={{ led: statusLed, text: statusText }}
       dirty={dirty}
     >
@@ -1353,7 +1357,7 @@ function TelegramSection() {
           Send test message
         </Btn>
         {testMsg && (
-          <ResultPill kind={testStatus === 'error' ? 'err' : 'ok'}>
+          <ResultPill kind={testStatus === 'error' ? 'err' : cfg?.service_enabled ? 'ok' : 'info'}>
             {testMsg}
           </ResultPill>
         )}
