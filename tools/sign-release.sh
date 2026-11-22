@@ -28,6 +28,8 @@ IMAGE_NAME="dashvault-$TAG-raspberry-pi.zip"
 SIGNING_KEY="${DASHVAULT_SIGNING_KEY:-$HOME/.minisign/dashvault.key}"
 PUBLIC_KEY="${DASHVAULT_PUBLIC_KEY:-$ROOT/teslausb-www/go-backend/release-signing.pub}"
 COMMENT="dashvault-release $TAG"
+# The script works in a temp folder, so name the repository explicitly.
+export GH_REPO="${GH_REPO:-pgodlews/dashvault}"
 
 function die () {
   echo "sign-release: $*" >&2
