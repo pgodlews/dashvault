@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { apiFetch } from '../lib/api'
 import { useStatus } from '../hooks/useStatus'
 import { Icon, type IconName } from '../components/Icon'
@@ -15,19 +15,16 @@ export const Route = createFileRoute('/settings')({
 function SettingsPage() {
   const mainRef = useRef<HTMLElement>(null)
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '220px 1fr',
+    <div className="settings-shell" style={{
       gap: 1,
       background: 'var(--border)',
       height: '100%',
       minHeight: 0,
     }}>
       <SettingsNav scrollRef={mainRef} />
-      <main ref={mainRef} style={{
+      <main ref={mainRef} className="settings-main" style={{
         background: 'var(--bg-0)',
         overflowY: 'auto',
-        padding: 'var(--sp-7) var(--sp-8)',
       }}>
         <div style={{
           maxWidth: 880,
@@ -89,6 +86,7 @@ const NAV_ITEMS = [
 
 function SettingsNav({ scrollRef }: { scrollRef: React.RefObject<HTMLElement | null> }) {
   const [active, setActive] = useState('archive')
+  const navRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     const container = scrollRef.current
@@ -109,16 +107,23 @@ function SettingsNav({ scrollRef }: { scrollRef: React.RefObject<HTMLElement | n
     return () => container.removeEventListener('scroll', onScroll)
   }, [scrollRef])
 
+  // On a phone the menu is a sideways strip: keep the current section in view.
+  useEffect(() => {
+    const nav = navRef.current
+    const link = nav?.querySelector<HTMLElement>('[aria-current="true"]')
+    if (!nav || !link || nav.scrollWidth <= nav.clientWidth) return
+    const offset = link.getBoundingClientRect().left - nav.getBoundingClientRect().left
+    nav.scrollTo({ left: nav.scrollLeft + offset - (nav.clientWidth - link.offsetWidth) / 2, behavior: 'smooth' })
+  }, [active])
+
   const scrollTo = (id: string) => {
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   return (
-    <nav style={{
+    <nav ref={navRef} aria-label="Settings sections" className="settings-nav" data-scroll-x style={{
       background: 'var(--bg-1)',
-      padding: 'var(--sp-4) var(--sp-2)',
-      overflowY: 'auto',
     }}>
       <h5 style={{
         margin: 'var(--sp-3) var(--sp-3) var(--sp-2)',
@@ -132,21 +137,19 @@ function SettingsNav({ scrollRef }: { scrollRef: React.RefObject<HTMLElement | n
         <a
           key={it.id}
           onClick={() => scrollTo(it.id)}
+          className="settings-nav-link"
+          aria-current={active === it.id ? 'true' : undefined}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '8px var(--sp-3)',
             borderRadius: 'var(--radius-sm)',
             color: active === it.id ? 'var(--fg-0)' : 'var(--fg-1)',
             fontSize: 'var(--ts-sm)',
             fontWeight: 500,
             textDecoration: 'none',
             cursor: 'pointer',
-            borderLeft: '2px solid transparent',
-            marginLeft: -2,
             background: active === it.id ? 'var(--bg-2)' : 'transparent',
-            borderLeftColor: active === it.id ? 'var(--accent)' : 'transparent',
           }}
         >
           <span>{it.label}</span>
@@ -179,11 +182,10 @@ function SectionCard({ id, icon, title, sub, status, dirty, children }: SectionC
         overflow: 'hidden',
       }}
     >
-      <header style={{
+      <header className="settings-card-header" style={{
         display: 'flex',
         alignItems: 'center',
         gap: 'var(--sp-3)',
-        padding: 'var(--sp-4) var(--sp-5)',
         borderBottom: '1px solid var(--border)',
         background: 'var(--bg-1)',
       }}>
@@ -198,7 +200,7 @@ function SectionCard({ id, icon, title, sub, status, dirty, children }: SectionC
         }}>
           {icon}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="settings-card-heading" style={{ flex: 1, minWidth: 0 }}>
           <h2 style={{
             margin: 0,
             fontSize: 'var(--ts-lg)',
@@ -225,7 +227,7 @@ function SectionCard({ id, icon, title, sub, status, dirty, children }: SectionC
           )}
         </div>
         {status && (
-          <span style={{
+          <span className="settings-card-status" style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
@@ -258,8 +260,7 @@ function SectionCard({ id, icon, title, sub, status, dirty, children }: SectionC
 
 function SectionBody({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
-      padding: 'var(--sp-5)',
+    <div className="settings-body" style={{
       display: 'flex',
       flexDirection: 'column',
       gap: 'var(--sp-5)',
@@ -271,11 +272,10 @@ function SectionBody({ children }: { children: React.ReactNode }) {
 
 function SectionFooter({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
+    <div className="settings-footer" style={{
       display: 'flex',
       alignItems: 'center',
       gap: 'var(--sp-2)',
-      padding: 'var(--sp-4) var(--sp-5)',
       borderTop: '1px solid var(--border)',
       background: 'var(--bg-1)',
     }}>
@@ -317,9 +317,7 @@ function Field({ label, hint, children, row }: {
 
 function FieldGrid({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
+    <div className="settings-field-grid" style={{
       gap: 'var(--sp-4)',
     }}>
       {children}
@@ -349,9 +347,9 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { mono?: boo
   )
 }
 
-function InputGroup({ children }: { children: React.ReactNode }) {
+function InputGroup({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div style={{ position: 'relative', display: 'flex' }}>
+    <div className={className} style={{ position: 'relative', display: 'flex' }}>
       {children}
     </div>
   )
@@ -361,6 +359,7 @@ function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
+      className="settings-toggle"
       style={{
         width: 36, height: 20,
         borderRadius: 999,
@@ -407,6 +406,7 @@ function Btn({ children, onClick, disabled, loading, variant = 'default', icon }
     <button
       onClick={onClick}
       disabled={disabled || loading}
+      className="settings-btn"
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -481,7 +481,7 @@ function ResultPill({ kind, children }: { kind: 'ok' | 'err' | 'info'; children:
   const color = kind === 'ok' ? 'var(--ok)' : kind === 'err' ? 'var(--err)' : 'var(--fg-1)'
   const bg = kind === 'ok' ? 'rgba(16,185,129,.1)' : kind === 'err' ? 'rgba(225,29,42,.1)' : 'var(--bg-2)'
   return (
-    <span style={{
+    <span className="settings-pill" style={{
       display: 'inline-flex',
       alignItems: 'center',
       gap: 6,
@@ -682,9 +682,7 @@ function ArchiveSection() {
             marginBottom: 6,
             display: 'block',
           }}>Backend</label>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
+          <div className="settings-backends" style={{
             gap: 'var(--sp-2)',
           }}>
             {BACKENDS.map(b => {
@@ -740,7 +738,7 @@ function ArchiveSection() {
           <div style={{ marginBottom: 8, color: 'var(--fg-0)', fontSize: 'var(--ts-sm)', fontWeight: 500 }}>
             Content to archive
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div className="settings-content-toggles" style={{ gap: 12 }}>
             <Field label="SavedClips" hint="Driver-saved events">
               <Toggle on={draft.saved_clips} onClick={() => setDraft(d => ({ ...d, saved_clips: !d.saved_clips }))} />
             </Field>
@@ -1149,7 +1147,7 @@ function RsyncSSHKeySection() {
                     boxSizing: 'border-box',
                   }}
                 />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+                <div className="settings-wrap" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
                   <Btn
                     onClick={importKey}
                     disabled={!importVal.trim() || importStatus === 'importing'}
@@ -2094,9 +2092,9 @@ function WifiSection() {
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-sm)',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--ts-sm)' }}>
+                <div className="settings-row-info" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--ts-sm)' }}>
                   <Icon name="wifi" size={14} />
-                  <span style={{ fontWeight: n.active ? 600 : 400 }}>{n.ssid}</span>
+                  <span style={{ fontWeight: n.active ? 600 : 400, overflowWrap: 'anywhere' }}>{n.ssid}</span>
                   {n.active && (
                     <span style={{
                       fontSize: 11, padding: '1px 6px',
@@ -2161,11 +2159,11 @@ function WifiSection() {
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-sm)',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 'var(--ts-sm)', minWidth: 0 }}>
+                <div className="settings-row-info" style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 'var(--ts-sm)' }}>
                   <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--ok)', flexShrink: 0 }}>
                     {signalBars(n.signal)}
                   </span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.ssid}</span>
+                  <span className="settings-ssid">{n.ssid}</span>
                   <span style={{ flexShrink: 0, fontSize: 11, color: 'var(--fg-3)' }}>{n.security}</span>
                   {n.saved && (
                     <span style={{
@@ -2222,7 +2220,7 @@ function WifiSection() {
               </div>
             </Field>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+            <div className="settings-wrap" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
               <Btn
                 onClick={addNetwork}
                 disabled={addStatus === 'saving'}
@@ -2539,7 +2537,7 @@ function BenchmarkSection() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
               {results.map((r, i) => (
-                <div key={i} style={{
+                <div key={i} className="settings-wrap" style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 'var(--sp-4)',
@@ -2570,7 +2568,7 @@ function BenchmarkSection() {
           </p>
         )}
 
-        <div style={{
+        <div className="settings-wrap" style={{
           marginTop: 'var(--sp-4)',
           display: 'flex',
           gap: 'var(--sp-3)',
@@ -2813,7 +2811,7 @@ function TelemetrySection() {
           label="Track retention"
           hint={`Whole days older than this are deleted. Clips are not affected. A year of driving is about 160 MB, so the limit is about privacy, not space.${describeStore(store) ? ` Stored now: ${describeStore(store)}.` : ''}`}
         >
-          <InputGroup>
+          <InputGroup className="settings-retention">
             <select
               aria-label="Track retention"
               value={customRetention || !RETENTION_PRESETS.includes(retention) ? 'custom' : String(retention)}
@@ -2855,7 +2853,7 @@ function TelemetrySection() {
         <Field label="Local vector map style (optional)" hint="A MapLibre style URL such as http://maps.local:8090/style.json. Overrides the raster tile URL when set.">
           <Input mono value={styleUrl} onChange={event => setStyleUrl(event.target.value)} placeholder="http://maps.local:8090/style.json" style={{ width: '100%' }} />
         </Field>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div className="settings-wrap" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <BtnPrimary onClick={save} disabled={!dirty || saving} loading={saving}>Save</BtnPrimary>
           <Btn onClick={clearHistory} variant="danger" disabled={store?.total_clips === 0}>Clear track history</Btn>
           {msg && <span style={{ color: 'var(--fg-2)', fontSize: 'var(--ts-sm)' }}>{msg}</span>}
@@ -3042,6 +3040,19 @@ function PowerThermalSection() {
   )
 }
 
+const PHONE_QUERY = '(max-width: 600px)'
+
+function useIsPhone() {
+  return useSyncExternalStore(
+    onChange => {
+      const query = window.matchMedia(PHONE_QUERY)
+      query.addEventListener('change', onChange)
+      return () => query.removeEventListener('change', onChange)
+    },
+    () => window.matchMedia(PHONE_QUERY).matches,
+  )
+}
+
 function ThermalHistoryChart({ history, warn, crit, maxMHz }: {
   history: ThermalHistoryResponse | null
   warn?: number
@@ -3049,6 +3060,7 @@ function ThermalHistoryChart({ history, warn, crit, maxMHz }: {
   maxMHz?: number
 }) {
   const [hover, setHover] = useState<number | null>(null)
+  const phone = useIsPhone()
   const samples = history?.samples ?? []
 
   const box: React.CSSProperties = {
@@ -3064,7 +3076,9 @@ function ThermalHistoryChart({ history, warn, crit, maxMHz }: {
     )
   }
 
-  const W = 800, H = 220, padL = 40, padR = 48, padT = 12, padB = 24
+  const W = phone ? 380 : 800, H = 220, padL = 40, padR = 48, padT = phone ? 26 : 12, padB = 24
+  const labelSize = phone ? 13 : 10
+  const unitSize = phone ? 12 : 9
   const t0 = Date.parse(samples[0].ts)
   const t1 = Date.parse(samples[samples.length - 1].ts)
   const span = Math.max(1, t1 - t0)
@@ -3120,20 +3134,20 @@ function ThermalHistoryChart({ history, warn, crit, maxMHz }: {
         {ticks.map(c => (
           <g key={c}>
             <line x1={padL} x2={W - padR} y1={yT(c)} y2={yT(c)} stroke="var(--border)" strokeWidth={1} />
-            <text x={padL - 6} y={yT(c) + 4} textAnchor="end" fontSize={10} fill="var(--fg-2)">{c}°</text>
+            <text x={padL - 6} y={yT(c) + 4} textAnchor="end" fontSize={labelSize} fill="var(--fg-2)">{c}°</text>
           </g>
         ))}
         {[0, 0.5, 1].map(f => (
-          <text key={f} x={W - padR + 6} y={yM(mMax * f) + 4} fontSize={10} fill="var(--fg-3)">{Math.round(mMax * f)}</text>
+          <text key={f} x={W - padR + 6} y={yM(mMax * f) + 4} fontSize={labelSize} fill="var(--fg-3)">{Math.round(mMax * f)}</text>
         ))}
-        <text x={W - 4} y={padT - 2} textAnchor="end" fontSize={9} fill="var(--fg-3)">MHz</text>
+        <text x={W - 4} y={phone ? 12 : padT - 2} textAnchor="end" fontSize={unitSize} fill="var(--fg-3)">MHz</text>
         {warn != null && <line x1={padL} x2={W - padR} y1={yT(warn)} y2={yT(warn)} stroke="var(--warn)" strokeDasharray="6 4" strokeWidth={1.2} />}
         {crit != null && <line x1={padL} x2={W - padR} y1={yT(crit)} y2={yT(crit)} stroke="var(--err)" strokeDasharray="6 4" strokeWidth={1.2} />}
         <path d={mhzPath} fill="none" stroke="var(--fg-3)" strokeWidth={1} opacity={0.7} />
         {hasGpu && <path d={gpuPath} fill="none" stroke="var(--warn)" strokeWidth={1.5} opacity={0.8} />}
         <path d={cpuPath} fill="none" stroke="var(--accent)" strokeWidth={2} />
-        <text x={padL} y={H - 6} fontSize={10} fill="var(--fg-2)">{fmtTime(t0)}</text>
-        <text x={W - padR} y={H - 6} textAnchor="end" fontSize={10} fill="var(--fg-2)">{fmtTime(t1)}</text>
+        <text x={padL} y={H - 6} fontSize={labelSize} fill="var(--fg-2)">{fmtTime(t0)}</text>
+        <text x={W - padR} y={H - 6} textAnchor="end" fontSize={labelSize} fill="var(--fg-2)">{fmtTime(t1)}</text>
         {hs && (
           <g>
             <line x1={x(hs.ts)} x2={x(hs.ts)} y1={padT} y2={H - padB} stroke="var(--fg-2)" strokeWidth={1} />

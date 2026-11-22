@@ -1,0 +1,111 @@
+/* Layout that depends on screen width. Inline styles cannot use media queries,
+   so these properties live here, with the desktop values as the defaults. */
+
+/* ─── top bar ─────────────────────────────────────────────────────────────── */
+
+.app-topbar { gap: var(--sp-4); padding: 0 var(--sp-4); height: 48px; }
+.app-topbar-tabs { display: flex; gap: 2px; }
+.app-topbar-tab { padding: 6px 14px; white-space: nowrap; }
+
+@media (max-width: 1000px) {
+  .app-topbar {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 4px var(--sp-2);
+    padding: 6px var(--sp-3);
+  }
+  .app-topbar-tabs {
+    order: 1;
+    flex: 1 0 100%;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .app-topbar-tabs { justify-content: space-between; }
+  .app-topbar-tab { padding: 6px 7px; }
+  /* The Dashboard shows storage in full; the bar has no room for it here. */
+  .app-topbar-storage { display: none !important; }
+}
+
+/* ─── settings shell ──────────────────────────────────────────────────────── */
+
+.settings-shell { display: grid; grid-template-columns: 220px 1fr; }
+.settings-nav { padding: var(--sp-4) var(--sp-2); overflow-y: auto; }
+.settings-nav-link {
+  padding: 8px var(--sp-3);
+  border-left: 2px solid transparent;
+  margin-left: -2px;
+}
+.settings-nav-link[aria-current='true'] { border-left-color: var(--accent); }
+.settings-main { padding: var(--sp-7) var(--sp-8); }
+
+/* ─── settings cards ──────────────────────────────────────────────────────── */
+
+.settings-card-header { padding: var(--sp-4) var(--sp-5); }
+.settings-body { padding: var(--sp-5); }
+.settings-footer { padding: var(--sp-4) var(--sp-5); }
+.settings-field-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.settings-backends { display: grid; grid-template-columns: repeat(5, 1fr); }
+.settings-content-toggles { display: grid; grid-template-columns: repeat(3, 1fr); }
+.settings-row-info { min-width: 0; }
+.settings-ssid { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .settings-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .settings-nav {
+    display: flex;
+    gap: 4px;
+    padding: 6px var(--sp-3);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .settings-nav h5 { display: none; }
+  .settings-nav-link {
+    flex: 0 0 auto;
+    margin-left: 0;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+  .settings-nav-link[aria-current='true'] { border-bottom-color: var(--accent); }
+  .settings-main { padding: var(--sp-5); }
+
+  .settings-footer,
+  .settings-wrap { flex-wrap: wrap; }
+  .settings-pill { max-width: 100%; overflow-wrap: anywhere; }
+  .settings-shell code { overflow-wrap: anywhere; }
+  .settings-shell :is(input, select, textarea) { min-width: 0; max-width: 100%; }
+  .settings-shell input { text-overflow: ellipsis; }
+  .settings-row-info { flex-wrap: wrap; }
+  .settings-ssid { overflow-wrap: anywhere; white-space: normal; }
+  .settings-retention { flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+  .settings-retention input { flex: 0 0 100px; }
+}
+
+@media (max-width: 600px) {
+  .settings-main { padding: var(--sp-3); }
+  .settings-card-header {
+    flex-wrap: wrap;
+    padding: var(--sp-3) var(--sp-4);
+  }
+  /* Give the title the full row, with the status pill under it. */
+  .settings-card-heading { flex-basis: calc(100% - 32px - var(--sp-3)) !important; }
+  .settings-card-status { margin-left: calc(32px + var(--sp-3)); }
+  .settings-body { padding: var(--sp-4); }
+  .settings-footer { padding: var(--sp-3) var(--sp-4); }
+  .settings-field-grid,
+  .settings-content-toggles { grid-template-columns: minmax(0, 1fr); }
+  .settings-backends { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  /* iOS zooms the whole page when a focused field is under 16px. */
+  .settings-shell :is(input, select, textarea) { font-size: 16px !important; }
+  .settings-btn { min-height: 40px; justify-content: center; }
+  .settings-toggle::after { content: ''; position: absolute; inset: -10px; }
+}

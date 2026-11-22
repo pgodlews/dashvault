@@ -142,12 +142,9 @@ function TopBar() {
   const freePct = clipDisk ? (100 - clipDisk.used_pct).toFixed(0) : '—'
 
   return (
-    <nav style={{
+    <nav aria-label="Main" className="app-topbar" style={{
       display: 'flex',
       alignItems: 'center',
-      gap: 'var(--sp-4)',
-      padding: '0 var(--sp-4)',
-      height: 48,
       background: 'var(--bg-1)',
       borderBottom: '1px solid var(--border)',
       flexShrink: 0,
@@ -171,15 +168,15 @@ function TopBar() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 2 }}>
+      <div className="app-topbar-tabs" data-scroll-x>
         {tabs.map(t => {
           const active = pathname === t.to
           return (
             <Link
               key={t.to}
               to={t.to}
+              className="app-topbar-tab"
               style={{
-                padding: '6px 14px',
                 borderRadius: 'var(--radius-pill)',
                 color: active ? 'var(--accent-ink)' : 'var(--fg-2)',
                 background: active ? 'var(--accent)' : 'transparent',
@@ -223,7 +220,7 @@ function TopBar() {
           }} />
           {archiveLabel}
         </span>
-        <span style={{
+        <span className="app-topbar-storage" style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
