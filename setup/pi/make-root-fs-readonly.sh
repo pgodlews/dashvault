@@ -56,6 +56,15 @@ apt-get -y --force-yes autoremove --purge
 # Replace log management with busybox (use logread if needed)
 log_progress "Installing busybox-syslogd..."
 apt-get -y --force-yes install busybox-syslogd; dpkg --purge rsyslog
+# Debian's /etc/syslog.conf sends logs to files. While the root filesystem is
+# briefly writable, syslogd would open them and keep them open, and the root
+# filesystem could then not return to read-only. Keep logs in RAM only.
+syslog_setting='SYSLOG_OPTS="-C128 -f /dev/null"'
+{ grep -v '^SYSLOG_OPTS=' /etc/default/busybox-syslogd || true; echo "$syslog_setting"; } \
+  > /etc/default/busybox-syslogd.new
+chmod 644 /etc/default/busybox-syslogd.new
+mv /etc/default/busybox-syslogd.new /etc/default/busybox-syslogd
+systemctl try-restart busybox-syslogd.service || true
 
 log_progress "Configuring system..."
 

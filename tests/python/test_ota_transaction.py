@@ -59,6 +59,9 @@ def test_ota_scripts_begin_transaction_before_logging_or_writes() -> None:
         assert 'source "${OTA_TRANSACTION_LIB:-/root/bin/ota_transaction.sh}"' in source
         assert source.index("ota_begin_transaction") < source.index("log()")
         assert "/run/teslausb/rootfs.lock" in TRANSACTION.read_text()
+        # A running script replaced on disk would keep root from going read-only.
+        assert source.index("OTA_SCRIPT_RELOCATED=1 exec") < source.index("ota_begin_transaction")
+        assert 'exec "$BASH"' in source
 
 
 def test_release_and_ota_install_include_provisioning_and_skip_backend_in_bin() -> None:
@@ -131,6 +134,7 @@ def test_ota_upgrades_and_restores_telegram_unit(
         "PATH": f"{commands}:{os.environ['PATH']}",
         "SERVICE_LOG": str(log),
         "ACTIVE_EXIT": "0" if active else "3",
+        "OTA_SYSLOG_DEFAULTS": str(tmp_path / "no-busybox-syslogd"),
     }
     if legacy_installer:
         # Legacy apply has copied bin/ and saved the previous runtime, but left
@@ -168,6 +172,48 @@ def test_ota_upgrades_and_restores_telegram_unit(
             assert repeated.returncode == 0, repeated.stderr
             assert log.read_text().splitlines() == actions  # idempotent startup
         log.write_text("")
+
+
+def test_finalize_keeps_logs_in_ram_and_restores_read_only(tmp_path: Path) -> None:
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    for name, body in {
+        "systemctl": 'echo "$*" >> "$SERVICE_LOG"',
+        "mount": 'echo "$*" >> "$MOUNT_LOG"',
+        "findmnt": 'if [ "$1" = --fstab ]; then echo defaults,noatime,ro; else echo rw,noatime; fi',
+        "flock": "exit 0",
+    }.items():
+        path = commands / name
+        path.write_text(f"#!/bin/bash\n{body}\n")
+        path.chmod(0o755)
+    defaults = tmp_path / "busybox-syslogd"
+    defaults.write_text('# comment\nSYSLOG_OPTS="-C128"\nKLOG_OPTS=""\n')
+    services = tmp_path / "services.log"
+    mounts = tmp_path / "mount.log"
+    env = {
+        **os.environ,
+        "PATH": f"{commands}:{os.environ['PATH']}",
+        "OTA_TRANSACTION_LIB": str(TRANSACTION),
+        "OTA_LOCK_FILE": str(tmp_path / "root.lock"),
+        "OTA_SYSLOG_DEFAULTS": str(defaults),
+        "OTA_PACKAGED_TELEGRAM_UNIT": str(tmp_path / "no-unit"),
+        "SERVICE_LOG": str(services),
+        "MOUNT_LOG": str(mounts),
+    }
+    for _ in range(2):  # the second startup must change nothing
+        result = subprocess.run(  # noqa: S603 — repository script only
+            [BASH, "-eu", str(ROOT / "run/ota_finalize.sh")],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    setting = 'SYSLOG_OPTS="-C128 -f /dev/null"'
+    assert defaults.read_text().splitlines() == ["# comment", 'KLOG_OPTS=""', setting]
+    assert services.read_text().splitlines() == ["try-restart busybox-syslogd.service"]
+    assert mounts.read_text().splitlines() == ["-o remount,rw /", "-o remount,ro /"]
+    assert setting in (ROOT / "setup/pi/make-root-fs-readonly.sh").read_text()
 
 
 def _ota_commands(tmp_path: Path) -> Path:

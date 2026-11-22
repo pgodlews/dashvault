@@ -18,6 +18,15 @@
 #   6. Writes the new version to /root/teslausb_version
 set -o pipefail
 
+# This script replaces its own file below. Run from a copy in RAM: bash would
+# otherwise hold the deleted file open, and root could not return to read-only.
+if [ -z "${OTA_SCRIPT_RELOCATED:-}" ]; then
+  relocated="$(mktemp "${TMPDIR:-/tmp}/ota_install.XXXXXX")"
+  cp "$0" "$relocated"
+  OTA_SCRIPT_RELOCATED=1 exec "$BASH" -eu "$relocated" "$@"
+fi
+rm -f "$0"
+
 # shellcheck disable=SC1090
 source "${OTA_TRANSACTION_LIB:-/root/bin/ota_transaction.sh}"
 ota_begin_transaction

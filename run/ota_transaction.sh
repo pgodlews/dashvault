@@ -42,7 +42,8 @@ function ota_end_transaction() {
   fi
   if [ "$OTA_ROOT_WAS_RO" = "true" ]
   then
-    mount -o remount,ro "$OTA_ROOT_MOUNT"
+    mount -o remount,ro "$OTA_ROOT_MOUNT" \
+      || echo "WARNING: could not return $OTA_ROOT_MOUNT to read-only" >&2
   fi
   flock -u "$OTA_LOCK_FD" || true
 }

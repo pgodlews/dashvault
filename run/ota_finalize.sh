@@ -2,6 +2,29 @@
 # First-upgrade compatibility: old installers copy bin/ but ignore units/.
 # Called at backend startup; wait for the installer's rootfs lock before writes.
 set -o pipefail
+
+# Boards set up before v0.1.1 let syslogd keep log files open on the root
+# filesystem, which leaves it writable after any update or settings change.
+# Keep logs in RAM, and put a board that was left writable back to read-only.
+SYSLOG_DEFAULTS="${OTA_SYSLOG_DEFAULTS:-/etc/default/busybox-syslogd}"
+SYSLOG_SETTING='SYSLOG_OPTS="-C128 -f /dev/null"'
+if [ -f "$SYSLOG_DEFAULTS" ] && ! grep -qxF "$SYSLOG_SETTING" "$SYSLOG_DEFAULTS"; then
+  (
+    # shellcheck disable=SC1090
+    source "${OTA_TRANSACTION_LIB:-/root/bin/ota_transaction.sh}"
+    ota_begin_transaction
+    if findmnt --fstab -no OPTIONS "$OTA_ROOT_MOUNT" | tr ',' '\n' | grep -qx ro; then
+      # shellcheck disable=SC2034  # read by ota_end_transaction
+      OTA_ROOT_WAS_RO=true
+    fi
+    { grep -v '^SYSLOG_OPTS=' "$SYSLOG_DEFAULTS" || true; echo "$SYSLOG_SETTING"; } \
+      > "$SYSLOG_DEFAULTS.new"
+    chmod 644 "$SYSLOG_DEFAULTS.new"
+    mv "$SYSLOG_DEFAULTS.new" "$SYSLOG_DEFAULTS"
+    systemctl try-restart busybox-syslogd.service
+  )
+fi
+
 UNIT=teslausb-telegram-bot.service
 PACKAGED_UNIT="${OTA_PACKAGED_TELEGRAM_UNIT:-/root/bin/$UNIT}"
 UNIT_DIR="${OTA_INSTALL_UNITS:-/lib/systemd/system}"

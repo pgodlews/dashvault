@@ -8,6 +8,15 @@
 # bin/, backend binary, www/, and the VERSION file, then restarts services.
 set -o pipefail
 
+# This script restores over its own file below. Run from a copy in RAM so bash
+# never reads changed content or holds a deleted file open on the root disk.
+if [ -z "${OTA_SCRIPT_RELOCATED:-}" ]; then
+  relocated="$(mktemp "${TMPDIR:-/tmp}/ota_rollback.XXXXXX")"
+  cp "$0" "$relocated"
+  OTA_SCRIPT_RELOCATED=1 exec "$BASH" -eu "$relocated" "$@"
+fi
+rm -f "$0"
+
 # shellcheck disable=SC1090
 source "${OTA_TRANSACTION_LIB:-/root/bin/ota_transaction.sh}"
 ota_begin_transaction
