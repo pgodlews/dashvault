@@ -275,6 +275,16 @@ export OTA_ENABLED=true
 export OTA_RELEASE_URL=https://api.github.com/repos/pgodlews/dashvault/releases/latest
 ```
 
+From v0.1.1, Settings installs a release only if it is newer than the installed version and signed with the project's offline [minisign](https://jedisct1.github.io/minisign/) key. v0.1.0 has no signature. To check a signed download yourself, put it next to the release's `SHA256SUMS` and `SHA256SUMS.minisig`, then run:
+
+```bash
+minisign -Vm SHA256SUMS -P RWQgDh4vhXWM3w8rsMoew4ZBOz6abx/qY0KwCnRAK73rf2huszUBUbX9
+```
+
+```bash
+shasum -a 256 --ignore-missing -c SHA256SUMS
+```
+
 **The operating system** (Debian and Raspberry Pi OS packages, including security fixes) is updated with a command over SSH, because the Pi's system partition is normally read-only and a plain `apt-get upgrade` fails or gets undone:
 
 ```bash

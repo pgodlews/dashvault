@@ -197,7 +197,7 @@ func HandleUpdateStatus(w http.ResponseWriter, r *http.Request) {
 
 	if latest != nil {
 		status.LatestVersion = latest.TagName
-		status.UpdateAvailable = latest.TagName != status.CurrentVersion
+		status.UpdateAvailable = isNewerRelease(latest.TagName, status.CurrentVersion)
 		status.LastChecked = lastChecked.UTC().Format(time.RFC3339)
 	}
 
@@ -253,18 +253,28 @@ func HandleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var tgzURL, sha256URL string
+	var tgzURL, sumsURL, signatureURL string
 	for _, a := range latest.Assets {
 		switch a.Name {
 		case "teslausb-update.tar.gz":
 			tgzURL = a.BrowserDownloadURL
 		case "SHA256SUMS":
-			sha256URL = a.BrowserDownloadURL
+			sumsURL = a.BrowserDownloadURL
+		case "SHA256SUMS.minisig":
+			signatureURL = a.BrowserDownloadURL
 		}
 	}
 
 	if tgzURL == "" {
 		http.Error(w, `{"error":"release is missing teslausb-update.tar.gz asset"}`, http.StatusBadGateway)
+		return
+	}
+	if sumsURL == "" || signatureURL == "" {
+		http.Error(w, `{"error":"release is not signed; refusing to install it"}`, http.StatusBadGateway)
+		return
+	}
+	if !isNewerRelease(latest.TagName, currentVersion()) {
+		http.Error(w, `{"error":"release is not newer than the installed version"}`, http.StatusConflict)
 		return
 	}
 
@@ -282,7 +292,7 @@ func HandleUpdateApply(w http.ResponseWriter, r *http.Request) {
 	installSc := otaInstallScript
 	go func() {
 		defer finishOTA()
-		if err := downloadVerifyAndInstall(ver, tgzURL, sha256URL, logPath, dlPath, exDir, installSc); err != nil {
+		if err := downloadVerifyAndInstall(ver, tgzURL, sumsURL, signatureURL, logPath, dlPath, exDir, installSc); err != nil {
 			appendOTALog(logPath, fmt.Sprintf("ERROR: %v", err))
 		}
 	}()
@@ -343,23 +353,33 @@ func HandleUpdateLog(w http.ResponseWriter, r *http.Request) {
 
 // ── update pipeline ────────────────────────────────────────────────────────────
 
-func downloadVerifyAndInstall(ver, tgzURL, sha256URL, logPath, dlPath, exDir, installSc string) error {
+func downloadVerifyAndInstall(ver, tgzURL, sumsURL, signatureURL, logPath, dlPath, exDir, installSc string) error {
 	appendOTALog(logPath, fmt.Sprintf("=== Starting update to %s ===", ver))
+
+	appendOTALog(logPath, "Verifying release signature...")
+	sums, err := fetchReleaseText(sumsURL, 64*1024)
+	if err != nil {
+		return fmt.Errorf("SHA256SUMS: %w", err)
+	}
+	signature, err := fetchReleaseText(signatureURL, 4*1024)
+	if err != nil {
+		return fmt.Errorf("signature download: %w", err)
+	}
+	if err := verifyReleaseSignature(sums, signature, ver); err != nil {
+		return err
+	}
+	appendOTALog(logPath, "Signature OK")
 
 	appendOTALog(logPath, fmt.Sprintf("Downloading %s", tgzURL))
 	if err := downloadFile(tgzURL, dlPath); err != nil {
 		return fmt.Errorf("download: %w", err)
 	}
 
-	if sha256URL != "" {
-		appendOTALog(logPath, "Verifying SHA256...")
-		if err := verifySHA256(dlPath, sha256URL); err != nil {
-			return fmt.Errorf("SHA256: %w", err)
-		}
-		appendOTALog(logPath, "SHA256 OK")
-	} else {
-		appendOTALog(logPath, "WARNING: no SHA256SUMS asset in release — skipping checksum verification")
+	appendOTALog(logPath, "Verifying SHA256...")
+	if err := verifySHA256(dlPath, sums); err != nil {
+		return fmt.Errorf("SHA256: %w", err)
 	}
+	appendOTALog(logPath, "SHA256 OK")
 
 	appendOTALog(logPath, "Extracting tarball...")
 	if err := os.RemoveAll(exDir); err != nil {
@@ -370,6 +390,13 @@ func downloadVerifyAndInstall(ver, tgzURL, sha256URL, logPath, dlPath, exDir, in
 	}
 	if err := extractTar(dlPath, exDir); err != nil {
 		return fmt.Errorf("extract: %w", err)
+	}
+	packagedVersion, err := os.ReadFile(filepath.Join(exDir, "VERSION"))
+	if err != nil {
+		return fmt.Errorf("read packaged version: %w", err)
+	}
+	if strings.TrimSpace(string(packagedVersion)) != ver {
+		return fmt.Errorf("update contains version %q, not release %s", strings.TrimSpace(string(packagedVersion)), ver)
 	}
 
 	appendOTALog(logPath, "Handing off to independent systemd installer (service will restart)...")
@@ -406,32 +433,43 @@ func downloadFile(url, dest string) error {
 	return err
 }
 
-func verifySHA256(tgzPath, sha256URL string) error {
+// fetchReleaseText downloads a small release file, refusing anything larger
+// than limit bytes.
+func fetchReleaseText(url string, limit int64) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sha256URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("User-Agent", "teslausb-ota/1.0")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	sumsData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("larger than %d bytes", limit)
+	}
+	return data, nil
+}
 
-	// Parse "sha256  filename" lines — accept both BSD and GNU format.
+func verifySHA256(tgzPath string, sums []byte) error {
+	// Parse "sha256  filename" lines; sha256sum marks binary mode with "*".
 	var expectedHash string
-	for _, line := range strings.Split(string(sumsData), "\n") {
+	for _, line := range strings.Split(string(sums), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) >= 2 && strings.HasSuffix(fields[len(fields)-1], "teslausb-update.tar.gz") {
+		if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == "teslausb-update.tar.gz" {
 			expectedHash = fields[0]
 			break
 		}

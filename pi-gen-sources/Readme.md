@@ -35,3 +35,21 @@ the cloud-init stage (first boot is driven by `rc.local`), and gives the root
 partition about 2.5 GB of free space for setup and for later operating system
 updates. The root partition is deliberately not grown on first boot, because
 setup uses the rest of the card for the dashcam drive.
+
+### Publishing a release
+
+1. Push a `vX.Y.Z` tag. The Release workflow builds the archives and creates a
+   draft, which installed boards and the installer cannot see.
+2. Download the draft's `teslausb-release.tar.gz` and build the image from it
+   as described above.
+3. On the machine with the offline signing key, run:
+
+   ```
+   tools/sign-release.sh vX.Y.Z /path/to/deploy/image_DATE-dashvault.zip
+   ```
+
+   It checks the draft, adds the image to `SHA256SUMS`, signs that file and
+   uploads the image and signature.
+4. Publish the draft with the command the script prints. Do not mark it as a
+   pre-release, because the installer and in-app updates follow
+   `releases/latest`, which ignores pre-releases.

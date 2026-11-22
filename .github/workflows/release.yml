@@ -7,9 +7,9 @@ name: Release
 #
 # The result is a draft. Installed boards and the installer follow
 # releases/latest, which ignores drafts, so nothing sees the release until the
-# SD image is attached. To finish it, build the image from the draft's
-# teslausb-release.tar.gz (pi-gen-sources/Readme.md), upload it, add its
-# checksum to SHA256SUMS, and publish the draft.
+# SD image is attached and it is signed. To finish it, build the image from the
+# draft's teslausb-release.tar.gz, run tools/sign-release.sh on the machine with
+# the offline key, and publish the draft (see pi-gen-sources/Readme.md).
 on:
   push:
     tags:

@@ -355,12 +355,8 @@ func TestVerifySHA256_match(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "%s  teslausb-update.tar.gz\n", hash)
-	}))
-	t.Cleanup(srv.Close)
-
-	if err := verifySHA256(otaDownloadPath, srv.URL); err != nil {
+	sums := []byte(fmt.Sprintf("%s  teslausb-update.tar.gz\n", hash))
+	if err := verifySHA256(otaDownloadPath, sums); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -372,13 +368,22 @@ func TestVerifySHA256_mismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "%s  teslausb-update.tar.gz\n", strings.Repeat("0", 64))
-	}))
-	t.Cleanup(srv.Close)
-
-	if err := verifySHA256(otaDownloadPath, srv.URL); err == nil {
+	sums := []byte(fmt.Sprintf("%s  teslausb-update.tar.gz\n", strings.Repeat("0", 64)))
+	if err := verifySHA256(otaDownloadPath, sums); err == nil {
 		t.Error("expected mismatch error")
+	}
+}
+
+func TestVerifySHA256_ignoresSimilarFileName(t *testing.T) {
+	redirectOTAPaths(t)
+	tgz, hash := buildTarGz(t, "test.txt", "hello")
+	if err := os.WriteFile(otaDownloadPath, tgz, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sums := []byte(fmt.Sprintf("%s  other-teslausb-update.tar.gz\n", hash))
+	if err := verifySHA256(otaDownloadPath, sums); err == nil {
+		t.Error("expected a checksum for another file to be ignored")
 	}
 }
 
@@ -457,7 +462,11 @@ func TestHandleUpdateApply_inFlightReturns409(t *testing.T) {
 	otaCache.mu.Lock()
 	otaCache.latest = &releaseInfo{
 		TagName: "v9.9.9",
-		Assets:  []releaseAsset{{Name: "teslausb-update.tar.gz", BrowserDownloadURL: "http://example.com/x"}},
+		Assets: []releaseAsset{
+			{Name: "teslausb-update.tar.gz", BrowserDownloadURL: "http://example.com/x"},
+			{Name: "SHA256SUMS", BrowserDownloadURL: "http://example.com/sums"},
+			{Name: "SHA256SUMS.minisig", BrowserDownloadURL: "http://example.com/sig"},
+		},
 	}
 	otaCache.mu.Unlock()
 	t.Cleanup(func() {

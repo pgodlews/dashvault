@@ -469,7 +469,9 @@ export TEMPERATURE_POSTARCHIVE=true
 # OTA is DISABLED by default — no network calls are made unless enabled.
 #
 # OTA_RELEASE_URL must point to a GitHub (or Gitea) releases/latest API endpoint
-# that serves a teslausb-update.tar.gz asset with a SHA256SUMS companion file.
+# that serves teslausb-update.tar.gz, SHA256SUMS and SHA256SUMS.minisig.
+# Updates must be signed with the key in go-backend/release-signing.pub, so a
+# fork or self-hosted server has to build the backend with its own public key.
 #
 # GitHub example:
 # export OTA_RELEASE_URL=https://api.github.com/repos/YOURUSER/dashvault/releases/latest

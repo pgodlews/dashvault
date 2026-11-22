@@ -314,6 +314,8 @@ Archive settings saves stop the archive loop and unmount its previous destinatio
 
 OTA reads `OTA_ENABLED` and `OTA_RELEASE_URL` from `teslausb_setup_variables.conf`; explicitly supplied service environment values take precedence, including an empty URL or disabled value. The shell-format file is parsed as configuration and is not executed by the backend.
 
+Before installing, the backend requires `SHA256SUMS.minisig` to be a valid minisign signature of `SHA256SUMS` by the key embedded from `release-signing.pub`, with the trusted comment `dashvault-release <tag>`. It then checks the archive against the signed checksum and its `VERSION` against the tag. A release that is unsigned, altered, made for another tag, or not newer than the installed version is refused. Rollback restores a local backup and needs no signature.
+
 At startup the backend invokes `ota_finalize.sh` when installed. It handles releases applied by older installers that copied only `bin/`, backing up and upgrading the effective Telegram unit after acquiring the shared rootfs transaction lock. A migration failure is logged to journald; an already matching unit is a no-op.
 
 ## Power & Thermal API
