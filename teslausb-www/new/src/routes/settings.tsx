@@ -1184,6 +1184,23 @@ interface TelegramConfig {
   service_running: boolean
 }
 
+interface TelegramFoundChat {
+  id: string
+  type: string
+  name: string
+  username?: string
+  last_seen: number
+}
+
+function telegramChatLabel(chat: TelegramFoundChat) {
+  const name = chat.name || (chat.username ? `@${chat.username}` : `Chat ${chat.id}`)
+  return chat.name && chat.username ? `${name} (@${chat.username})` : name
+}
+
+function chatIDList(value: string) {
+  return value.split(',').map(id => id.trim()).filter(Boolean)
+}
+
 function TelegramSection() {
   const [cfg, setCfg] = useState<TelegramConfig | null>(null)
   const [loadErr, setLoadErr] = useState('')
@@ -1197,6 +1214,9 @@ function TelegramSection() {
   const [saveMsg, setSaveMsg] = useState('')
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [testMsg, setTestMsg] = useState('')
+  const [findStatus, setFindStatus] = useState<'idle' | 'running' | 'info' | 'error'>('idle')
+  const [findMsg, setFindMsg] = useState('')
+  const [foundChats, setFoundChats] = useState<TelegramFoundChat[]>([])
 
   useEffect(() => {
     apiFetch('/api/config/telegram')
@@ -1239,6 +1259,7 @@ function TelegramSection() {
       setEnabled(saved.service_enabled)
       setBotToken('')
       setTestStatus('idle'); setTestMsg('')
+      setFindStatus('idle'); setFindMsg(''); setFoundChats([])
       setSaveStatus('done'); setSaveMsg('Saved.')
     } catch (e: unknown) {
       setSaveStatus('error'); setSaveMsg(e instanceof Error ? e.message : 'Save failed.')
@@ -1259,6 +1280,45 @@ function TelegramSection() {
     }
   }
 
+  function applyFoundChat(chat: TelegramFoundChat) {
+    const current = chatIDList(chatID)
+    setFoundChats([])
+    setFindStatus('info')
+    if (current.includes(chat.id)) {
+      setFindMsg(`${telegramChatLabel(chat)} is already in the list.`)
+      return
+    }
+    setChatID([...current, chat.id].join(', '))
+    setFindMsg(`Added ${telegramChatLabel(chat)}. Check this is you, then press Save.`)
+  }
+
+  async function findChats() {
+    setFindStatus('running'); setFindMsg(''); setFoundChats([])
+    try {
+      const res = await apiFetch('/api/config/telegram/find-chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bot_token: botToken.trim() }),
+      })
+      const data = await res.json().catch(() => ({})) as { chats?: TelegramFoundChat[]; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Could not look up chats.')
+      const chats = data.chats ?? []
+      if (chats.length === 0) {
+        setFindStatus('info')
+        setFindMsg('No recent messages found. Open your bot in Telegram, send it any message, then try again.')
+      } else if (chats.length === 1 && chatIDList(chatID).length === 0) {
+        applyFoundChat(chats[0])
+      } else {
+        setFoundChats(chats)
+        setFindStatus('info')
+        setFindMsg('Choose your chat. Anyone who finds your bot can message it, so only pick one you recognise.')
+      }
+    } catch (e: unknown) {
+      setFindStatus('error'); setFindMsg(e instanceof Error ? e.message : 'Could not look up chats.')
+    }
+  }
+
+  const canFindChats = Boolean(cfg?.has_token || botToken.trim())
   const canTest = cfg?.has_token && cfg?.chat_id !== ''
 
   const statusLed: 'ok' | 'warn' | 'idle' = cfg === null ? 'idle'
@@ -1326,13 +1386,64 @@ function TelegramSection() {
         </Field>
 
         <Field label="Chat ID">
-          <Input
-            mono
-            value={chatID}
-            placeholder="Your Telegram user or group ID"
-            onChange={e => setChatID(e.target.value)}
-          />
+          <div style={{
+            fontSize: 'var(--ts-xs)',
+            color: 'var(--fg-2)',
+            lineHeight: 1.5,
+            marginBottom: 4,
+          }}>
+            Send your bot any message in Telegram, then press Find my chat ID. You can also type an ID.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'center' }}>
+            <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+              <Input
+                mono
+                aria-label="Chat ID"
+                value={chatID}
+                placeholder="Your Telegram user or group ID"
+                onChange={e => setChatID(e.target.value)}
+              />
+            </div>
+            <Btn
+              onClick={findChats}
+              disabled={!canFindChats || findStatus === 'running'}
+              loading={findStatus === 'running'}
+              icon={<Icon name="refresh-cw" size={14} />}
+            >
+              Find my chat ID
+            </Btn>
+          </div>
         </Field>
+
+        {findMsg && (
+          <div>
+            <ResultPill kind={findStatus === 'error' ? 'err' : 'info'}>{findMsg}</ResultPill>
+          </div>
+        )}
+        {foundChats.length > 0 && (
+          <div role="list" aria-label="Recent Telegram chats" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+            {foundChats.map(chat => (
+              <div key={chat.id} role="listitem" style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 'var(--sp-2)',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: 'var(--sp-2) var(--sp-3)',
+                background: 'var(--bg-2)',
+                borderRadius: 'var(--radius-sm)',
+              }}>
+                <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                  <div style={{ fontSize: 'var(--ts-sm)', color: 'var(--fg-0)' }}>{telegramChatLabel(chat)}</div>
+                  <div style={{ fontSize: 'var(--ts-xs)', color: 'var(--fg-2)', fontFamily: 'var(--font-mono)' }}>
+                    {chat.id} · {chat.type || 'chat'} · {new Date(chat.last_seen * 1000).toLocaleString()}
+                  </div>
+                </div>
+                <Btn onClick={() => applyFoundChat(chat)}>Use this chat</Btn>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div style={{
           display: 'flex',

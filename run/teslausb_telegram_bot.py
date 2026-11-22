@@ -115,6 +115,14 @@ API = f"https://api.telegram.org/bot{TOKEN}"
 MAX_CLIP_BYTES = 50 * 1024 * 1024  # Telegram sendVideo limit
 MAX_RECENT = 5
 
+# Who recently messaged the bot, kept in RAM for "Find my chat ID" in Settings.
+# While this bot runs it is the only reader of Telegram's update stream.
+RECENT_CHATS_FILE = Path(
+    os.environ.get("TELEGRAM_RECENT_CHATS", "/run/teslausb/telegram_recent_chats.json")
+)
+MAX_RECENT_CHATS = 10
+_recent_chats: dict[int, dict[str, object]] = {}
+
 # ── Telegram helpers ──────────────────────────────────────────────────────────
 
 
@@ -728,8 +736,54 @@ def dispatch(chat_id: int, text: str) -> None:
         cmd_help(chat_id)
 
 
+def _update_message(update: dict[str, object]) -> dict[str, object] | None:
+    keys = ("message", "edited_message", "channel_post", "edited_channel_post", "my_chat_member")
+    for key in keys:
+        item = update.get(key)
+        if isinstance(item, dict):
+            return item
+    callback = update.get("callback_query")
+    if isinstance(callback, dict) and isinstance(callback.get("message"), dict):
+        return callback["message"]  # type: ignore[no-any-return]
+    return None
+
+
+def _write_recent_chats() -> None:
+    chats = sorted(_recent_chats.values(), key=lambda c: int(str(c["last_seen"])), reverse=True)
+    temporary = RECENT_CHATS_FILE.with_name(f"{RECENT_CHATS_FILE.name}.{os.getpid()}")
+    descriptor = os.open(temporary, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as fh:
+        json_module.dump(chats, fh)
+    os.replace(temporary, RECENT_CHATS_FILE)
+
+
+def remember_chat(update: dict[str, object]) -> None:
+    """Record who messaged the bot. This never authorizes the chat."""
+    message = _update_message(update)
+    chat = message.get("chat") if message else None
+    if not message or not isinstance(chat, dict) or not isinstance(chat.get("id"), int):
+        return
+    name = str(chat.get("title") or f"{chat.get('first_name', '')} {chat.get('last_name', '')}")
+    date = message.get("date")
+    _recent_chats[chat["id"]] = {
+        "id": chat["id"],
+        "type": str(chat.get("type") or ""),
+        "name": name.strip()[:64],
+        "username": str(chat.get("username") or "")[:64],
+        "last_seen": date if isinstance(date, int) else int(time.time()),
+    }
+    while len(_recent_chats) > MAX_RECENT_CHATS:
+        oldest = min(_recent_chats, key=lambda key: int(str(_recent_chats[key]["last_seen"])))
+        del _recent_chats[oldest]
+    try:
+        _write_recent_chats()
+    except OSError as exc:
+        log.warning("Could not record recent chats: %s", exc)
+
+
 def handle_update(update: dict[str, object]) -> None:
     """One getUpdates item: a text command, a shared location, or a button press."""
+    remember_chat(update)
     callback = update.get("callback_query")
     if isinstance(callback, dict):
         message = callback.get("message") or {}
@@ -780,6 +834,11 @@ def main() -> None:
         sys.exit(1)
 
     log.info("TeslaUSB Telegram bot starting. Allowed IDs: %s", ALLOWED_IDS)
+    # The token may have changed, so chats from a previous run may be another bot's.
+    try:
+        RECENT_CHATS_FILE.unlink(missing_ok=True)
+    except OSError as exc:
+        log.warning("Could not clear recent chats: %s", exc)
     offset = 0
     retry_delay = 0.0
 

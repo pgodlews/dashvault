@@ -139,6 +139,7 @@ func newHTTPHandler(broker *Broker, verify credentialVerifier) http.HandlerFunc 
 		}
 	})
 	mux.HandleFunc("POST /api/config/telegram/test", mutate(HandleTelegramTest))
+	mux.HandleFunc("POST /api/config/telegram/find-chats", mutate(HandleTelegramFindChats))
 
 	// rsync SSH key management
 	mux.HandleFunc("GET /api/config/rsync/ssh-key", read(HandleRsyncSSHKey))

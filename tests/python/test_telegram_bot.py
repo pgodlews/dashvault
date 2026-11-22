@@ -437,3 +437,43 @@ def test_main_backoff_restarts_after_a_successful_poll(bot) -> None:
             pytest.raises(_StopLoop):
         bot.main()
     assert [call.args[0] for call in sleep.call_args_list] == [5, 10, 5]
+
+
+def test_remember_chat_records_without_authorizing(bot, tmp_path: Path) -> None:
+    bot.RECENT_CHATS_FILE = tmp_path / "recent.json"
+    update = {
+        "update_id": 1,
+        "message": {
+            "date": 1700000000,
+            "text": "hello",
+            "chat": {"id": 333, "type": "private", "first_name": "Ann", "username": "ann"},
+        },
+    }
+    with patch.object(bot, "dispatch") as dispatch:
+        bot.handle_update(update)
+    dispatch.assert_not_called()
+    assert 333 not in bot.ALLOWED_IDS
+    assert json.loads(bot.RECENT_CHATS_FILE.read_text()) == [
+        {"id": 333, "type": "private", "name": "Ann", "username": "ann", "last_seen": 1700000000}
+    ]
+    assert bot.RECENT_CHATS_FILE.stat().st_mode & 0o777 == 0o600
+
+
+def test_remember_chat_keeps_only_the_newest(bot, tmp_path: Path) -> None:
+    bot.RECENT_CHATS_FILE = tmp_path / "recent.json"
+    for chat_id in range(1, bot.MAX_RECENT_CHATS + 3):
+        bot.remember_chat(
+            {"message": {"date": 1000 + chat_id, "chat": {"id": chat_id, "type": "private"}}}
+        )
+    stored = json.loads(bot.RECENT_CHATS_FILE.read_text())
+    assert len(stored) == bot.MAX_RECENT_CHATS
+    assert stored[0]["id"] == bot.MAX_RECENT_CHATS + 2
+    assert all(chat["id"] > 2 for chat in stored)
+
+
+def test_remember_chat_failure_does_not_stop_commands(bot, tmp_path: Path) -> None:
+    bot.RECENT_CHATS_FILE = tmp_path / "missing" / "recent.json"
+    update = {"message": {"date": 1, "text": "/help", "chat": {"id": 111, "type": "private"}}}
+    with patch.object(bot, "dispatch") as dispatch:
+        bot.handle_update(update)
+    dispatch.assert_called_once_with(111, "/help")

@@ -75,7 +75,7 @@ Routes are registered in `main.go`. The complete stack is `authRateLimit(require
 | `/cgi-bin/trigger_sync.sh` | `HandleTriggerSync` | `os.Create("/tmp/archive_is_unreachable")` |
 | `/cgi-bin/pairBLEkey.sh` | `HandlePairBLEKey` | Runs `/root/bin/pairBLEkey.sh` |
 | `/api/config/archive` | `HandleArchiveConfig` | Save backend configuration atomically; `recent_cameras` (omit to keep) maps to `RECENTCLIPS_CAMERAS`, empty when every camera is selected; GET also returns `detected_cameras` from clip file names under `/mutable/TeslaCam`. An empty `cifs.password` keeps the saved one; `cifs.clear_password: true` removes it. Values with control characters, or rsync/rclone names that could be read as command-line options, are rejected |
-| `/api/config/telegram`, `/api/config/telegram/test` | Telegram handlers | Save config, reconcile service state, or send a test |
+| `/api/config/telegram`, `/api/config/telegram/test`, `/api/config/telegram/find-chats` | Telegram handlers | Save config, reconcile service state, or send a test |
 | `/api/config/rsync/keygen`, `/api/config/rsync/import-key` | rsync key handlers | Generate or import SSH keys |
 | `/api/wifi/networks`, `/api/wifi/networks/{ssid}` | WiFi handlers | Add or delete NetworkManager profiles |
 | `/api/setup/apply` | `HandleSetupApply` | Complete setup while preserving unrelated settings |

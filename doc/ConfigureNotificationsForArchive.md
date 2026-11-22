@@ -15,15 +15,22 @@ Notifications need the Pi to have internet access while it is on your Wi-Fi. A m
 
 ## 2. Find your chat ID
 
-Send any message to [@userinfobot](https://t.me/userinfobot). It replies with your numeric ID, for example `123456789`.
+1. In the web app, open Settings and go to **Notifications — Telegram**.
+2. Paste the bot token. If it is already saved, you can leave the field blank.
+3. In Telegram, send your bot any message.
+4. Press **Find my chat ID**. Dashvault fills in the field if exactly one chat has messaged the bot and the field is empty. If there are several, or the field already has an ID, choose yours with **Use this chat**.
 
-The bot only answers the chat IDs you list. To allow more than one person, separate the IDs with commas.
+Check the name before saving. The chat ID is the bot's allowlist, and anyone who finds your bot can message it. Nothing is allowed until you press **Save**, and you can still edit the field.
 
-## 3. Enter them
+If you prefer, type the ID yourself. The bot only answers the chat IDs you list. To allow more than one person, separate the IDs with commas.
 
-**In the web app:** open Settings, go to **Notifications — Telegram**, enter the token and chat ID, turn on **Enable bot service**, save, and press **Send test message**. A test message should arrive within a few seconds. The test can reach Telegram while the bot is off, so notifications and commands only work once that switch is on and saved.
+## 3. Finish in the web app
 
-**Or in the configuration file** (`teslausb_setup_variables.conf`), before setup:
+Turn on **Enable bot service**, press **Save**, then press **Send test message**. A test message should arrive within a few seconds. The test can reach Telegram while the bot is off, so notifications and commands only work once that switch is on and saved.
+
+## Set it up with the configuration file instead
+
+Add these to `teslausb_setup_variables.conf` before setup:
 
 ```bash
 export TELEGRAM_ENABLED=true

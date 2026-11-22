@@ -9,6 +9,7 @@ package main
 //   GET  /api/config/telegram       — status + masked token + chat ID + service state
 //   POST /api/config/telegram       — write config, enable/disable service
 //   POST /api/config/telegram/test  — send a real test message via Telegram API
+//   POST /api/config/telegram/find-chats — list chats that recently messaged the bot
 
 import (
 	"bytes"
