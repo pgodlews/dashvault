@@ -176,7 +176,7 @@ Some features are marked experimental in Settings and are off by default.
 
 | Board | Status |
 |---|---|
-| Raspberry Pi Zero 2 W | The recommended board for speed. Not yet tested on the current image, and [an open upstream issue](https://github.com/raspberrypi/linux/issues/7634) affects mixed WPA2/WPA3 routers. |
+| Raspberry Pi Zero 2 W | The recommended board for speed. Image, setup, install and in-app updates tested on the current image. USB connection to a car not yet tested on it, and [an open upstream issue](https://github.com/raspberrypi/linux/issues/7634) affects mixed WPA2/WPA3 routers. |
 | Raspberry Pi Zero W | Image, hotspot and Bluetooth setup, and install tested on the current image. The web app and archiving are slow. |
 | Radxa Zero 3 | Works with the [install script](#radxa-and-other-boards). No flashable image and no hotspot setup. |
 | Raspberry Pi 400 | Image, hotspot and Bluetooth setup, and install tested. USB connection to a car not tested, and as a keyboard computer it is not a practical choice. Does not join WPA3-only networks. |
