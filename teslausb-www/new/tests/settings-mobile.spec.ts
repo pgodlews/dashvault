@@ -252,6 +252,25 @@ test('the section menu jumps to a section on a phone', async ({ page }) => {
   await expect(page.locator('#danger')).toBeInViewport()
 })
 
+for (const width of [390, 1440]) {
+  test(`the section menu highlights the section on screen at ${width}px`, async ({ page }) => {
+    await openSettings(page, width)
+    const menu = page.getByRole('navigation', { name: 'Settings sections' })
+    const current = menu.locator('[aria-current="true"]')
+
+    for (const label of ['Network & Wi-Fi', 'Power & Thermal', 'Advanced', 'Notifications', 'Danger Zone', 'Archive storage']) {
+      await menu.getByText(label, { exact: true }).click()
+      await expect(current).toHaveText(label)
+    }
+
+    // These cards have no menu entry of their own and belong under Advanced.
+    for (const id of ['advanced-telemetry', 'advanced-ota', 'advanced-usb', 'advanced-sd']) {
+      await page.locator(`#${id}`).evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'instant' }))
+      await expect(current, id).toHaveText('Advanced')
+    }
+  })
+}
+
 test('the desktop layout keeps its sidebar and single-row top bar', async ({ page }) => {
   await openSettings(page, 1440)
   const sidebar = await page.getByRole('navigation', { name: 'Settings sections' }).boundingBox()

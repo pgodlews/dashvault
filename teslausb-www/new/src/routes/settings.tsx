@@ -92,15 +92,18 @@ function SettingsNav({ scrollRef }: { scrollRef: React.RefObject<HTMLElement | n
     const container = scrollRef.current
     if (!container) return
     const onScroll = () => {
-      const sections = NAV_ITEMS.map(it => document.getElementById(it.id))
+      // Follow page order, which differs from the menu order.
+      const sections = [...container.querySelectorAll<HTMLElement>('section[id]')]
+      if (sections.length === 0) return
       const threshold = container.getBoundingClientRect().top + 100
-      for (let i = sections.length - 1; i >= 0; i--) {
-        const s = sections[i]
-        if (s && s.getBoundingClientRect().top <= threshold) {
-          setActive(NAV_ITEMS[i].id)
-          break
-        }
-      }
+      const atEnd = container.scrollTop > 0
+        && container.scrollTop + container.clientHeight >= container.scrollHeight - 1
+      // The last card is short and may never reach the threshold.
+      const current = atEnd
+        ? sections[sections.length - 1]
+        : sections.filter(s => s.getBoundingClientRect().top <= threshold).pop() ?? sections[0]
+      // GPS, OTA, USB and SD cards have ids like advanced-sd and sit under Advanced.
+      setActive(current.id.startsWith('advanced') ? 'advanced' : current.id)
     }
     container.addEventListener('scroll', onScroll)
     onScroll()
