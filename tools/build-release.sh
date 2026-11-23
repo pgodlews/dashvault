@@ -127,6 +127,7 @@ done
 install -m 644 setup/pi/teslausb-telegram-bot.service "$STAGING/bin/"
 install -m 644 setup/pi/envsetup.sh "$STAGING/bin/"
 install -m 755 run/lib/paths.sh "$STAGING/bin/lib/"
+install -m 755 run/lib/startup_drives.sh "$STAGING/bin/lib/"
 install -m 644 run/lib/dependencies.txt "$STAGING/bin/lib/"
 for script in archive-clips.sh connect-archive.sh disconnect-archive.sh archive-is-reachable.sh
 do

@@ -62,6 +62,7 @@ def test_app_update_archive_has_what_the_installer_reads(release: Path) -> None:
         "bin/ota_install.sh",
         "bin/teslausb_telegram_bot.py",
         "bin/lib/paths.sh",
+        "bin/lib/startup_drives.sh",
         "bin/lib/backends/cifs/archive-clips.sh",
         "bin/provisioning/provisioning_config.py",
         "bin/teslausb-backend.arm64",

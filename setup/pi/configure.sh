@@ -229,6 +229,7 @@ function install_archive_scripts () {
   copy_script run/check-deps.sh "$install_path"
   mkdir -p "$install_path/lib"
   copy_script run/lib/dependencies.txt "$install_path/lib"
+  copy_script run/lib/startup_drives.sh "$install_path/lib"
   copy_script run/ota_finalize.sh "$install_path"
   copy_script run/waitforidle "$install_path"
   copy_script run/remountfs_rw "$install_path"

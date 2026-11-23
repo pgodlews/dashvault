@@ -12,6 +12,8 @@ modprobe -r g_ether 2>/dev/null || true
 
 # shellcheck source=run/lib/paths.sh
 source "$(dirname "$0")/lib/paths.sh"
+# shellcheck source=run/lib/startup_drives.sh
+source "$(dirname "$0")/lib/startup_drives.sh"
 
 function log () {
   echo "$( date ):" "$@" >> "$LOG_FILE"
@@ -1115,14 +1117,22 @@ fi
 logrotator &
 wifichecker &
 
-fix_errors_in_images
-# always remove files that fsck recoverd
-clean_cam_mount boot
-
-if has_cam_disk
+if prepare_drives_for_startup
 then
-  # don't need another fsck because fix_errors_in_images already did that
-  /root/bin/make_snapshot.sh nofsck
+  fix_errors_in_images
+  # always remove files that fsck recoverd
+  clean_cam_mount boot
+
+  if has_cam_disk
+  then
+    # don't need another fsck because fix_errors_in_images already did that
+    /root/bin/make_snapshot.sh nofsck
+  fi
+elif has_cam_disk
+then
+  # The car may be writing to the image, so only check the snapshot copy.
+  # The image itself is repaired at the next normal disconnect.
+  /root/bin/make_snapshot.sh || log "Could not take a startup snapshot."
 fi
 
 connect_usb_drives_to_host
