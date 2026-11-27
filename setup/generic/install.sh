@@ -245,29 +245,47 @@ rm -f /etc/rc.local
 fetch_source pi-gen-sources/00-teslausb-tweaks/files/rc.local /etc/rc.local
 chmod a+x /etc/rc.local
 
+# Vendor desktop images run PackageKit, which takes the dpkg lock to refresh
+# packages soon after boot. Make every apt call here and in the later setup
+# wait for the lock instead of failing.
+echo 'DPkg::Lock::Timeout "600";' > /etc/apt/apt.conf.d/90teslausb-lock-timeout
+
+# A freshly flashed vendor image may have no package lists, so refresh them
+# once before the first install. Fail loudly: the shebang's -e is lost when
+# the script is run as "bash install.sh".
+APT_UPDATED=false
+function apt_install {
+  if [ "$APT_UPDATED" = false ]
+  then
+    apt-get update || apt-get update --allow-releaseinfo-change || error_exit "apt-get update failed"
+    APT_UPDATED=true
+  fi
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+}
+
 if [ ! -x "$(command -v dos2unix)" ]
 then
-  apt install -y dos2unix
+  apt_install dos2unix || error_exit "Could not install dos2unix"
 fi
 
 if [ ! -x "$(command -v sntp)" ] && [ ! -x "$(command -v ntpdig)" ]
 then
-  apt install -y sntp || apt install -y ntpsec-ntpdig
+  apt_install sntp || apt_install ntpsec-ntpdig || error_exit "Could not install sntp or ntpsec-ntpdig"
 fi
 
 if [ ! -x "$(command -v parted)" ]
 then
-  apt install -y parted
+  apt_install parted || error_exit "Could not install parted"
 fi
 
 if [ ! -x "$(command -v fdisk)" ]
 then
-  apt install -y fdisk
+  apt_install fdisk || error_exit "Could not install fdisk"
 fi
 
 if [ ! -x "$(command -v sudo)" ]
 then
-  apt install -y sudo
+  apt_install sudo || error_exit "Could not install sudo"
 fi
 
 
