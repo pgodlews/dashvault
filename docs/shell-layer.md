@@ -285,6 +285,14 @@ No `eval` in archiveloop or runtime scripts.
 
 `setup/generic/install.sh` prepares non-prebuilt systems for the main setup flow. It defaults to the `pgodlews/dashvault` sources and accepts `SOURCE_DIR` as a local source tree. When the boot disk has less than 32 GiB unallocated, it calculates the root target as current usage plus 5 GiB, rounded up to whole GiB with an 8 GiB minimum. It verifies that the target fits and leaves 32 GiB for TeslaUSB before using the initramfs resize path. The root partition must be the last partition.
 
+On its first run it also calls `setup/generic/trim-desktop.sh`, because vendor images often boot a desktop that Dashvault never uses:
+
+- It switches the default target from `graphical.target` to `multi-user.target`.
+- It masks display managers (GDM, SDDM, LightDM and others) and PackageKit.
+- It disables desktop-only services: CUPS, accounts-daemon, rtkit, upower, udisks2, colord, power-profiles-daemon, and Rockchip's Chromium X helper, camera ISP and NPU daemons.
+
+Only units that exist are touched, and nothing is stopped or uninstalled, so it takes effect at the next reboot. `/root/DESKTOP_TRIMMED` records that it ran. Set `KEEP_DESKTOP=true` to skip it. To undo it, unmask and enable the display manager and run `systemctl set-default graphical.target`.
+
 ### `configure-web.sh`
 Runs during initial Pi setup. Key actions:
 1. `apt-get install nginx golang-go fuse libfuse-dev g++ net-tools wireless-tools ethtool zip`

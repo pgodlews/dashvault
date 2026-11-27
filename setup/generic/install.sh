@@ -94,6 +94,16 @@ function use_release {
 }
 use_release
 
+# Vendor desktop images boot into a desktop that Dashvault never uses. Switch
+# to a text boot now, so the reboots below already come up without it. Set
+# KEEP_DESKTOP=true to leave the desktop alone.
+if [ "${KEEP_DESKTOP:-false}" != true ] && [ ! -e /root/DESKTOP_TRIMMED ]
+then
+  fetch_source setup/generic/trim-desktop.sh /tmp/teslausb-trim-desktop
+  bash /tmp/teslausb-trim-desktop
+  touch /root/DESKTOP_TRIMMED
+fi
+
 function flash_rapidly {
   for led in /sys/class/leds/*
   do 

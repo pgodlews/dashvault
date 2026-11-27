@@ -257,7 +257,7 @@ For experienced users. There is no Dashvault image and no hotspot or Bluetooth s
    sudo bash install.sh
    ```
 
-4. It may shrink the root filesystem and reboot, then carry on by itself. When it has finished, open a root shell with `sudo -i`, edit `/teslausb/teslausb_setup_variables.conf`, and run `/etc/rc.local`.
+4. It switches the board to a text boot with the desktop turned off (set `KEEP_DESKTOP=true` to keep it). It may shrink the root filesystem and reboot, then carry on by itself. When it has finished, open a root shell with `sudo -i`, edit `/teslausb/teslausb_setup_variables.conf`, and run `/etc/rc.local`.
 
 ### The web password is required
 
