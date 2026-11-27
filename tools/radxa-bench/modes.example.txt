@@ -1,0 +1,7 @@
+# label|bssid|power save   (empty bssid = let NetworkManager choose)
+# List your access points' BSSIDs with: nmcli -f SSID,BSSID,CHAN,SIGNAL dev wifi list
+auto||on
+auto-ps-off||off
+nodeA-5g|aa:bb:cc:dd:ee:01|on
+nodeA-2g|aa:bb:cc:dd:ee:02|on
+nodeB-5g|aa:bb:cc:dd:ee:03|on

@@ -29,6 +29,7 @@ AI agent and developer reference for the `pgodlews/dashvault` fork.
 | [`dev-workflow.md`](dev-workflow.md) | CI, testing, branch conventions, deployment |
 | [`sd-card-write-testing.md`](sd-card-write-testing.md) | Tesla-like write workloads, raw card throughput, buffering, and benchmark results |
 | [`power-benchmarking.md`](power-benchmarking.md) | USB 2.0/3.0 power budget analysis, BLE power meter benchmark (`tools/power-benchmark.py`), and Radxa / RPi Zero 2 W power profiles |
+| [`radxa-thermal-and-antennas.md`](radxa-thermal-and-antennas.md) | Radxa Zero 3W temperatures under load with a heatsink, enabling the external antenna, and built-in vs external antenna Wi-Fi results (`tools/radxa-bench/`) |
 
 ## Extension Guides
 
